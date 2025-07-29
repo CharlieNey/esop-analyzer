@@ -58,6 +58,23 @@ export const initializeDatabase = async () => {
       ON document_chunks USING ivfflat (embedding vector_cosine_ops)
     `);
 
+    // Create AI metrics cache table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_metrics_cache (
+        id SERIAL PRIMARY KEY,
+        document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+        ai_metrics JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(document_id)
+      )
+    `);
+
+    // Create index on document_id and created_at for cache queries
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ai_metrics_cache_document_created 
+      ON ai_metrics_cache (document_id, created_at)
+    `);
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);
