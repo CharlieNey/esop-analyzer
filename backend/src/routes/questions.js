@@ -178,7 +178,7 @@ ${context}`;
 ${fallbackChunk.chunk_text.substring(0, 8000)}
 === END OF PAGE ${fallbackPageNum} ===`; // Limit to ~2000 tokens
         
-        const answer = await answerQuestion(question, fallbackContext);
+        const answer = await answerQuestion(question, fallbackContext, documentId);
         
         const citations = [{
           chunkIndex: fallbackChunk.chunk_index,
@@ -200,7 +200,7 @@ ${fallbackChunk.chunk_text.substring(0, 8000)}
       }
       
       // Get answer from OpenAI
-      let answer = await answerQuestion(question, contextWithSummary);
+      let answer = await answerQuestion(question, contextWithSummary, documentId);
       
       // Validate that answer contains page references - if not, add them
       answer = ensurePageReferences(answer, pageList);
@@ -231,6 +231,96 @@ ${fallbackChunk.chunk_text.substring(0, 8000)}
   } catch (error) {
     console.error('Question answering error:', error);
     res.status(500).json({ error: 'Failed to answer question' });
+  }
+});
+
+// Add validation endpoint to check data alignment
+router.get('/validate/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    
+    const client = await pool.connect();
+    try {
+      // Get extracted metrics
+      const metricsResult = await client.query(
+        'SELECT metric_type, metric_data FROM extracted_metrics WHERE document_id = $1',
+        [documentId]
+      );
+      
+      // Get document chunks
+      const chunksResult = await client.query(
+        'SELECT chunk_text, metadata FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index',
+        [documentId]
+      );
+      
+      const extractedMetrics = {};
+      metricsResult.rows.forEach(row => {
+        extractedMetrics[row.metric_type] = row.metric_data;
+      });
+      
+      // Sample questions to test alignment
+      const testQuestions = [
+        "What is the company valuation?",
+        "What is the per share value?",
+        "What is the discount rate?",
+        "How many shares are outstanding?"
+      ];
+      
+      const validationResults = [];
+      
+      for (const question of testQuestions) {
+        try {
+          // Get Q&A response
+          const questionEmbedding = await createEmbedding(question);
+          const similarChunks = [];
+          
+          for (const chunk of chunksResult.rows) {
+            const chunkEmbedding = JSON.parse(chunk.embedding);
+            const similarity = calculateCosineSimilarity(questionEmbedding, chunkEmbedding);
+            if (similarity > 0.25) {
+              similarChunks.push({ ...chunk, similarity });
+            }
+          }
+          
+          if (similarChunks.length > 0) {
+            similarChunks.sort((a, b) => b.similarity - a.similarity);
+            const context = similarChunks.slice(0, 3).map(chunk => chunk.chunk_text).join('\n\n');
+            const answer = await answerQuestion(question, context, documentId);
+            
+            validationResults.push({
+              question,
+              answer,
+              hasMetrics: Object.keys(extractedMetrics).length > 0,
+              metricsCount: Object.keys(extractedMetrics).length
+            });
+          }
+        } catch (error) {
+          validationResults.push({
+            question,
+            error: error.message,
+            hasMetrics: Object.keys(extractedMetrics).length > 0
+          });
+        }
+      }
+      
+      res.json({
+        documentId,
+        extractedMetrics,
+        validationResults,
+        summary: {
+          totalMetrics: Object.keys(extractedMetrics).length,
+          successfulValidations: validationResults.filter(r => !r.error).length,
+          totalValidations: validationResults.length
+        }
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Validation error:', error);
+    res.status(500).json({ error: 'Failed to validate alignment' });
   }
 });
 

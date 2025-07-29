@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { pool } from '../models/database.js';
 
 dotenv.config();
 
@@ -22,8 +23,30 @@ export const createEmbedding = async (text) => {
   }
 };
 
-export const answerQuestion = async (question, context) => {
+export const answerQuestion = async (question, context, documentId = null) => {
   try {
+    // Get extracted metrics to include in context
+    let extractedMetrics = null;
+    if (documentId) {
+      try {
+        const client = await pool.connect();
+        const metricsResult = await client.query(
+          'SELECT metric_type, metric_data FROM extracted_metrics WHERE document_id = $1',
+          [documentId]
+        );
+        client.release();
+        
+        if (metricsResult.rows.length > 0) {
+          extractedMetrics = {};
+          metricsResult.rows.forEach(row => {
+            extractedMetrics[row.metric_type] = row.metric_data;
+          });
+        }
+      } catch (error) {
+        console.log('⚠️ Could not fetch extracted metrics:', error.message);
+      }
+    }
+    
     // Estimate total tokens
     const questionTokens = Math.ceil(question.length / 4);
     const contextTokens = Math.ceil(context.length / 4);
@@ -79,6 +102,12 @@ CRITICAL CITATION REQUIREMENTS:
 
 IMPORTANT: You MUST answer based ONLY on the document content provided below. If the information is not in the provided content, say "I cannot find that specific information in the provided document content" rather than making assumptions.
 
+ALIGNMENT WITH DASHBOARD DATA:
+${extractedMetrics ? `The following metrics have been extracted from this document and are displayed on the dashboard:
+${JSON.stringify(extractedMetrics, null, 2)}
+
+IMPORTANT: Your answer should be consistent with these extracted metrics. If there are discrepancies, prioritize the extracted metrics data and explain any differences.` : ''}
+
 When answering:
 1. Start each key point with a page reference (e.g., "Table 1 on Page 3 indicates that...")
 2. Use ONLY the information from the provided document pages and visual elements
@@ -88,14 +117,15 @@ When answering:
 6. Explain complex financial concepts in clear terms with page and element citations
 7. When analyzing tables, reference specific rows/columns if helpful
 8. When describing charts, mention the chart type and key data points
+9. Ensure consistency with the extracted metrics data above
 
 Document Content:
 ${finalContext}
 
 REMEMBER: Your answer must explicitly reference the page numbers AND visual elements that appear in the document content above. The user will see these same references in the citations, so they must match your analysis.`;
 
-    // Use GPT-4 for larger context and better analysis
-    const chatModel = process.env.CHAT_MODEL || 'gpt-4-1106-preview';
+    // Use GPT-4o for faster processing
+    const chatModel = process.env.CHAT_MODEL || 'gpt-4o';
     let response;
     try {
       response = await openai.chat.completions.create({
@@ -124,8 +154,19 @@ REMEMBER: Your answer must explicitly reference the page numbers AND visual elem
     return response.choices[0].message.content;
   } catch (error) {
     console.error('OpenAI question answering error:', error);
-    // Fallback to mock answer if OpenAI fails completely
-    return generateMockAnswer(question, context);
+    
+    // Try Claude as fallback before mock answer
+    try {
+      console.log('🔄 Trying Claude fallback for question answering...');
+      const { answerQuestionWithClaude } = await import('./anthropicService.js');
+      const claudeAnswer = await answerQuestionWithClaude(question, finalContext);
+      console.log('✅ Question answered with Claude fallback');
+      return claudeAnswer;
+    } catch (claudeError) {
+      console.error('Claude fallback also failed:', claudeError);
+      // Final fallback to mock answer
+      return generateMockAnswer(question, context);
+    }
   }
 };
 
@@ -256,6 +297,9 @@ const mergeMetricsResults = (results) => {
     valuationDate: { date: null, description: null }
   };
   
+  // Track confidence scores for each metric
+  const confidenceScores = {};
+  
   for (const result of results) {
     if (!result) continue;
     
@@ -267,12 +311,28 @@ const mergeMetricsResults = (results) => {
             if (!merged[section]) merged[section] = {};
             if (merged[section][key] === null || merged[section][key] === undefined) {
               merged[section][key] = result[section][key];
+              
+              // Track confidence (first value found gets highest confidence)
+              const metricKey = `${section}.${key}`;
+              if (!confidenceScores[metricKey]) {
+                confidenceScores[metricKey] = 1.0; // High confidence for first value
+              }
+            } else {
+              // If we find a different value, lower confidence
+              const metricKey = `${section}.${key}`;
+              if (merged[section][key] !== result[section][key]) {
+                confidenceScores[metricKey] = Math.min(confidenceScores[metricKey] || 1.0, 0.7);
+                console.log(`⚠️ Conflicting values for ${metricKey}: ${merged[section][key]} vs ${result[section][key]}`);
+              }
             }
           }
         });
       }
     });
   }
+  
+  // Add confidence scores to the result
+  merged.confidenceScores = confidenceScores;
   
   return merged;
 };
@@ -368,55 +428,67 @@ export const extractMetrics = async (documentText) => {
     const pages = splitIntoPages(documentText);
     console.log(`📄 Document split into ${pages.length} pages for processing`);
     
-    const chatModel = process.env.CHAT_MODEL || 'gpt-4-1106-preview';
+    const chatModel = process.env.CHAT_MODEL || 'gpt-4o';
     
     // Process pages in parallel with concurrency control
     const processPage = async (page, pageIndex) => {
       try {
-        const response = await openai.chat.completions.create({
-          model: chatModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Page ${pageIndex + 1} content:\n${page}` }
-          ],
-          temperature: 0.1,
-          max_tokens: 1000, // Reduced from 2000 for faster responses
-        });
-        
-        const responseContent = response.choices[0].message.content.trim();
-        const pageResult = parseJSONResponse(responseContent);
-        console.log(`✅ Page ${pageIndex + 1} processed successfully`);
+        // Try Claude first for better accuracy and speed
+        const { extractMetricsWithClaude } = await import('./anthropicService.js');
+        const pageResult = await extractMetricsWithClaude(page);
+        console.log(`✅ Page ${pageIndex + 1} processed with Claude`);
         return { success: true, result: pageResult, pageIndex };
         
-      } catch (pageError) {
-        console.log(`⚠️ Page ${pageIndex + 1} failed with ${chatModel}:`, pageError.message);
+      } catch (claudeError) {
+        console.log(`⚠️ Page ${pageIndex + 1} failed with Claude:`, claudeError.message);
         
-        // Try fallback with GPT-3.5-turbo
+        // Fallback to OpenAI GPT-4o
         try {
           const response = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+            model: chatModel,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Page ${pageIndex + 1} content:\n${page}` }
             ],
             temperature: 0.1,
-            max_tokens: 1500,
+            max_tokens: 1000,
           });
           
           const responseContent = response.choices[0].message.content.trim();
           const pageResult = parseJSONResponse(responseContent);
-          console.log(`✅ Page ${pageIndex + 1} processed with fallback`);
+          console.log(`✅ Page ${pageIndex + 1} processed with GPT-4o fallback`);
           return { success: true, result: pageResult, pageIndex };
           
-        } catch (fallbackError) {
-          console.log(`❌ Page ${pageIndex + 1} failed completely:`, fallbackError.message);
-          return { success: false, result: null, pageIndex };
+        } catch (gptError) {
+          console.log(`⚠️ Page ${pageIndex + 1} failed with GPT-4o:`, gptError.message);
+          
+          // Final fallback with GPT-3.5-turbo
+          try {
+            const response = await openai.chat.completions.create({
+              model: 'gpt-3.5-turbo',
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Page ${pageIndex + 1} content:\n${page}` }
+              ],
+              temperature: 0.1,
+              max_tokens: 1500,
+            });
+            
+            const responseContent = response.choices[0].message.content.trim();
+            const pageResult = parseJSONResponse(responseContent);
+            console.log(`✅ Page ${pageIndex + 1} processed with GPT-3.5 final fallback`);
+            return { success: true, result: pageResult, pageIndex };
+            
+          } catch (finalError) {
+            console.log(`❌ Page ${pageIndex + 1} failed completely:`, finalError.message);
+            return { success: false, result: null, pageIndex };
+          }
         }
       }
     };
     
     // Process pages in parallel with concurrency limit
-    const concurrencyLimit = 3; // Process 3 pages at once
+    const concurrencyLimit = parseInt(process.env.CONCURRENCY_LIMIT) || 8; // Process 8 pages at once
     const results = new Array(pages.length);
     
     for (let i = 0; i < pages.length; i += concurrencyLimit) {
@@ -454,6 +526,12 @@ export const extractMetrics = async (documentText) => {
     console.error('OpenAI metrics extraction error:', error);
     return null;
   }
+};
+
+// Add cache clearing function
+export const clearMetricsCache = () => {
+  processedCache.clear();
+  console.log('🧹 Metrics cache cleared');
 };
 
 // Helper function to parse JSON responses with better error handling
@@ -540,7 +618,7 @@ const getOptimalModel = (documentSize) => {
   if (estimatedTokens > 8000) {
     return 'gpt-4o'; // Fastest GPT-4 variant
   } else if (estimatedTokens > 4000) {
-    return 'gpt-4-1106-preview'; // GPT-4 Turbo
+    return 'gpt-4o'; // GPT-4o is faster
   } else {
     return 'gpt-3.5-turbo'; // Fastest overall
   }

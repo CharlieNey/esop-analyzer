@@ -14,6 +14,7 @@ export const processPDF = async (filePath, filename) => {
     let pdfText;
     let parseMethod = 'unknown';
     let pageData = []; // Array to store page-by-page content
+    let visualElements = { tables: [], charts: [], images: [] }; // Initialize with empty structure
     
     try {
       // Use Reducto for PDF processing
@@ -27,14 +28,9 @@ export const processPDF = async (filePath, filename) => {
       
       console.log(`📁 File uploaded to Reducto: ${uploadResponse.file_id}`);
       
-      // Step 2: Parse the uploaded file with enhanced visual content extraction
+      // Step 2: Parse the uploaded file with basic extraction (enhanced params cause API errors)
       const parseResponse = await reducto.parse.run({
-        document_url: uploadResponse.file_id,
-        extract_tables: true,      // Enable table extraction
-        extract_charts: true,      // Enable chart extraction
-        extract_images: true,      // Enable image description
-        table_format: 'markdown',  // Get tables in markdown format
-        chart_analysis: true       // Get detailed chart analysis
+        document_url: uploadResponse.file_id
       });
       
       console.log(`📄 Reducto parsing completed`);
@@ -42,7 +38,7 @@ export const processPDF = async (filePath, filename) => {
       // Extract page-by-page content and visual elements from Reducto's structured output
       const extractionResult = extractContentFromReductoResult(parseResponse);
       pageData = extractionResult.pages;
-      const visualElements = extractionResult.visualElements;
+      visualElements = extractionResult.visualElements;
       parseMethod = 'reducto';
       console.log(`✅ Successfully extracted ${pageData.length} pages from PDF using Reducto`);
       
@@ -175,7 +171,7 @@ END OF EXTRACTED TEXT
       };
       
       // Create embeddings in parallel with concurrency control
-      const EMBEDDING_CONCURRENCY = parseInt(process.env.EMBEDDING_CONCURRENCY) || 5;
+      const EMBEDDING_CONCURRENCY = parseInt(process.env.EMBEDDING_CONCURRENCY) || 12;
       const embeddingPromises = [];
       
       for (let i = 0; i < allChunks.length; i += EMBEDDING_CONCURRENCY) {

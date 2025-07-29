@@ -1,7 +1,7 @@
 // Mock OpenAI service for testing without API key
 
 export const createEmbedding = async (text) => {
-  // Return mock embedding vector
+  // Return mock embedding vector (1536 dimensions for text-embedding-3-small)
   return Array(1536).fill(0).map(() => Math.random() - 0.5);
 };
 
