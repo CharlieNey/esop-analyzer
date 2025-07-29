@@ -91,7 +91,7 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md flex flex-col h-[600px]">
+    <div className="bg-white rounded-lg shadow-md flex flex-col h-[700px]">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-xl font-semibold text-gray-900 flex items-center">
@@ -224,17 +224,34 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
       {/* Input Area - Fixed at bottom */}
       <div className="border-t border-gray-200 p-4">
         {/* Example Questions */}
-        <div className="mb-3">
-          <div className="flex flex-wrap gap-2">
-            {exampleQuestions.map((exampleQ, index) => (
-              <button
-                key={index}
-                onClick={() => handleExampleClick(exampleQ)}
-                className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-              >
-                {exampleQ}
-              </button>
-            ))}
+        <div className="mb-2">
+          <div className="overflow-x-auto scrollbar-hidden hover:scrollbar-thin">
+            <div className="flex flex-col gap-1 min-w-max">
+              {/* First row */}
+              <div className="flex gap-1">
+                {exampleQuestions.slice(0, 2).map((exampleQ, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleExampleClick(exampleQ)}
+                    className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors whitespace-nowrap flex-shrink-0"
+                  >
+                    {exampleQ}
+                  </button>
+                ))}
+              </div>
+              {/* Second row */}
+              <div className="flex gap-1">
+                {exampleQuestions.slice(2).map((exampleQ, index) => (
+                  <button
+                    key={index + 2}
+                    onClick={() => handleExampleClick(exampleQ)}
+                    className="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors whitespace-nowrap flex-shrink-0"
+                  >
+                    {exampleQ}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

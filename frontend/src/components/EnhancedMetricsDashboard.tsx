@@ -357,12 +357,6 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
 
   return (
     <div className="space-y-6">
-      {/* AI Validation Section */}
-      <MetricsValidation 
-        documentId={documentId} 
-        metrics={validationMetrics}
-      />
-      
       <div className="bg-white rounded-lg shadow-md p-6">
         {/* Header with title, filename, valuation date, and download icon */}
         <div className="flex items-center justify-between mb-6">
@@ -386,6 +380,15 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
             <Download className="h-6 w-6 text-blue-600" />
           </button>
         </div>
+
+        {/* AI Validation Section - Validates the dashboard metrics */}
+        <div className="mb-6">
+          <MetricsValidation 
+            documentId={documentId} 
+            metrics={validationMetrics}
+          />
+        </div>
+
       {/* Dashboard content to capture */}
       <div id="dashboard-capture">
         {/* Metric Cards Grid */}
