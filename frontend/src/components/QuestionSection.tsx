@@ -51,11 +51,10 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
   }, [responses, isLoading]);
 
   const exampleQuestions = [
-    "What is the company's total valuation?",
-    "What discount rate was used in the valuation?",
-    "How many shares are owned by the ESOP?",
-    "What are the key financial assumptions?",
-    "What is the fair market value per share?"
+    "Were there any changes in management?",
+    "Did the company's revenue increase or decrease?",
+    "What were the guideline public companies considered?",
+    "What is the company's total valuation?"
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {

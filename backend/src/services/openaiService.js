@@ -442,7 +442,7 @@ export const extractMetrics = async (documentText) => {
       } catch (claudeError) {
         console.log(`⚠️ Page ${pageIndex + 1} failed with Claude:`, claudeError.message);
         
-        // Fallback to OpenAI GPT-4o
+        // Fallback to OpenAI GPT-4-turbo
         try {
           const response = await openai.chat.completions.create({
             model: chatModel,
@@ -456,13 +456,13 @@ export const extractMetrics = async (documentText) => {
           
           const responseContent = response.choices[0].message.content.trim();
           const pageResult = parseJSONResponse(responseContent);
-          console.log(`✅ Page ${pageIndex + 1} processed with GPT-4o fallback`);
+          console.log(`✅ Page ${pageIndex + 1} processed with ${chatModel} fallback`);
           return { success: true, result: pageResult, pageIndex };
           
         } catch (gptError) {
-          console.log(`⚠️ Page ${pageIndex + 1} failed with GPT-4o:`, gptError.message);
+          console.log(`⚠️ Page ${pageIndex + 1} failed with ${chatModel}:`, gptError.message);
           
-          // Final fallback with GPT-3.5-turbo
+          // Final fallback to GPT-3.5-turbo
           try {
             const response = await openai.chat.completions.create({
               model: 'gpt-3.5-turbo',
@@ -476,7 +476,7 @@ export const extractMetrics = async (documentText) => {
             
             const responseContent = response.choices[0].message.content.trim();
             const pageResult = parseJSONResponse(responseContent);
-            console.log(`✅ Page ${pageIndex + 1} processed with GPT-3.5 final fallback`);
+            console.log(`✅ Page ${pageIndex + 1} processed with GPT-3.5-turbo final fallback`);
             return { success: true, result: pageResult, pageIndex };
             
           } catch (finalError) {

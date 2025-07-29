@@ -159,6 +159,28 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
     return null;
   };
 
+  // Enhanced data extraction with more comprehensive field mapping
+  const extractAllMetricsFields = (metrics: any) => {
+    const allFields: any = {};
+    
+    // Recursively extract all fields from the metrics object
+    const extractFields = (obj: any, prefix = '') => {
+      for (const [key, value] of Object.entries(obj || {})) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          extractFields(value, fullKey);
+        } else {
+          allFields[fullKey] = value;
+        }
+      }
+    };
+    
+    extractFields(metrics.metrics);
+    return allFields;
+  };
+  
+  const allFields = extractAllMetricsFields(metrics);
+
   // Extract metrics data with better error handling
   const enterpriseValue = metrics.metrics.enterpriseValue?.data;
   const valueOfEquity = metrics.metrics.valueOfEquity?.data;
@@ -191,17 +213,26 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
     return null;
   };
 
-  // Prepare metric cards data with improved data extraction
+  // Prepare metric cards data with comprehensive field mapping
   const metricCards: MetricCardData[] = [
     {
       title: 'Enterprise Value',
       currentValue: getBestValue(
         enterpriseValue?.currentValue,
         enterpriseValue?.value,
+        enterpriseValue?.enterpriseValue,
         companyValuation?.totalValue,
-        companyValuation?.value
+        companyValuation?.value,
+        companyValuation?.enterpriseValue,
+        allFields['enterpriseValue.data.value'],
+        allFields['enterpriseValue.data.currentValue'],
+        allFields['valuation.enterpriseValue'],
+        allFields['metrics.enterpriseValue']
       ),
-      previousValue: getBestValue(enterpriseValue?.previousValue),
+      previousValue: getBestValue(
+        enterpriseValue?.previousValue,
+        enterpriseValue?.priorValue
+      ),
       format: 'currency',
       icon: <Building className="h-6 w-6" />,
       color: 'blue'
@@ -211,10 +242,18 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
       currentValue: getBestValue(
         valueOfEquity?.currentValue,
         valueOfEquity?.value,
-        companyValuation?.totalValue,
-        companyValuation?.value
+        valueOfEquity?.equityValue,
+        companyValuation?.equityValue,
+        companyValuation?.totalEquity,
+        allFields['valueOfEquity.data.value'],
+        allFields['valueOfEquity.data.currentValue'],
+        allFields['valuation.equityValue'],
+        allFields['equity.value']
       ),
-      previousValue: getBestValue(valueOfEquity?.previousValue),
+      previousValue: getBestValue(
+        valueOfEquity?.previousValue,
+        valueOfEquity?.priorValue
+      ),
       format: 'currency',
       icon: <DollarSign className="h-6 w-6" />,
       color: 'green'
@@ -224,10 +263,19 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
       currentValue: getBestValue(
         valuationPerShare?.currentValue,
         valuationPerShare?.value,
+        valuationPerShare?.perShareValue,
         companyValuation?.perShareValue,
-        companyValuation?.sharePrice
+        companyValuation?.sharePrice,
+        companyValuation?.pricePerShare,
+        allFields['valuationPerShare.data.value'],
+        allFields['valuationPerShare.data.currentValue'],
+        allFields['valuation.perShareValue'],
+        allFields['sharePrice.value']
       ),
-      previousValue: getBestValue(valuationPerShare?.previousValue),
+      previousValue: getBestValue(
+        valuationPerShare?.previousValue,
+        valuationPerShare?.priorValue
+      ),
       format: 'currency',
       icon: <Users className="h-6 w-6" />,
       color: 'purple'
@@ -237,7 +285,12 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
       currentValue: getBestValue(
         keyFinancials?.revenue,
         keyFinancials?.totalRevenue,
-        keyFinancials?.annualRevenue
+        keyFinancials?.annualRevenue,
+        keyFinancials?.grossRevenue,
+        allFields['keyFinancials.data.revenue'],
+        allFields['keyFinancials.data.totalRevenue'],
+        allFields['financials.revenue'],
+        allFields['revenue.value']
       ),
       format: 'currency',
       icon: <BarChart3 className="h-6 w-6" />,
@@ -248,15 +301,28 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
       currentValue: getBestValue(
         keyFinancials?.ebitda,
         keyFinancials?.EBITDA,
-        keyFinancials?.adjustedEbitda
+        keyFinancials?.adjustedEbitda,
+        keyFinancials?.normalizedEbitda,
+        allFields['keyFinancials.data.ebitda'],
+        allFields['keyFinancials.data.EBITDA'],
+        allFields['financials.ebitda'],
+        allFields['ebitda.value']
       ),
       format: 'currency',
       icon: <TrendingUp className="h-6 w-6" />,
       color: 'indigo',
       ebitdaMargin: (() => {
-        const revenue = getBestValue(keyFinancials?.revenue, keyFinancials?.totalRevenue);
-        const ebitda = getBestValue(keyFinancials?.ebitda, keyFinancials?.EBITDA);
-        return revenue && ebitda ? ((ebitda / revenue) * 100).toFixed(1) : null;
+        const revenue = getBestValue(
+          keyFinancials?.revenue,
+          keyFinancials?.totalRevenue,
+          keyFinancials?.annualRevenue
+        );
+        const ebitda = getBestValue(
+          keyFinancials?.ebitda,
+          keyFinancials?.EBITDA,
+          keyFinancials?.adjustedEbitda
+        );
+        return revenue && ebitda && revenue > 0 ? ((ebitda / revenue) * 100).toFixed(1) : null;
       })()
     },
     {
@@ -265,8 +331,13 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
         keyFinancials?.weightedAverageCostOfCapital,
         keyFinancials?.wacc,
         keyFinancials?.discountRate,
+        keyFinancials?.waccRate,
         metrics.metrics.discountRates?.data?.discountRate,
-        metrics.metrics.discountRates?.data?.wacc
+        metrics.metrics.discountRates?.data?.wacc,
+        allFields['discountRates.data.discountRate'],
+        allFields['discountRates.data.wacc'],
+        allFields['valuation.discountRate'],
+        allFields['wacc.value']
       ),
       format: 'percentage',
       icon: <Calculator className="h-6 w-6" />,
@@ -329,7 +400,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
           <div className="mt-8 pt-6 border-t border-gray-200">
             <div className="bg-gray-50 rounded-lg p-4">
               <h4 className="font-medium text-gray-900 mb-2">Ownership Structure</h4>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 space-y-2">
                 <div className="flex justify-between">
                   <span>Total Shares Outstanding:</span>
                   <span className="font-medium">
@@ -337,7 +408,10 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
                       const totalShares = getBestValue(
                         capitalStructure.totalShares,
                         capitalStructure.totalSharesOutstanding,
-                        capitalStructure.sharesOutstanding
+                        capitalStructure.sharesOutstanding,
+                        capitalStructure.outstandingShares,
+                        allFields['capitalStructure.data.totalShares'],
+                        allFields['capitalStructure.data.sharesOutstanding']
                       );
                       if (!totalShares) return 'N/A';
                       
@@ -357,9 +431,33 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
                       const esopPercentage = getBestValue(
                         capitalStructure.esopPercentage,
                         capitalStructure.esopOwnership,
-                        capitalStructure.employeeOwnership
+                        capitalStructure.employeeOwnership,
+                        capitalStructure.esopOwnershipPercentage,
+                        allFields['capitalStructure.data.esopPercentage'],
+                        allFields['capitalStructure.data.esopOwnership']
                       );
                       return esopPercentage ? `${esopPercentage.toFixed(1)}%` : 'N/A';
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>ESOP Shares:</span>
+                  <span className="font-medium">
+                    {(() => {
+                      const esopShares = getBestValue(
+                        capitalStructure.esopShares,
+                        capitalStructure.employeeShares,
+                        capitalStructure.esopSharesOutstanding,
+                        allFields['capitalStructure.data.esopShares']
+                      );
+                      if (!esopShares) return 'N/A';
+                      
+                      return esopShares >= 1000000 
+                        ? new Intl.NumberFormat('en-US', {
+                            notation: 'compact',
+                            compactDisplay: 'short'
+                          }).format(esopShares)
+                        : esopShares.toLocaleString();
                     })()}
                   </span>
                 </div>
@@ -367,6 +465,26 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
             </div>
           </div>
         )}
+        
+        {/* Data Quality Indicator */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>Data Quality</span>
+            <div className="flex items-center space-x-2">
+              {(() => {
+                const filledCards = metricCards.filter(card => card.currentValue !== null).length;
+                const completeness = (filledCards / metricCards.length) * 100;
+                const color = completeness >= 80 ? 'green' : completeness >= 60 ? 'yellow' : 'red';
+                return (
+                  <>
+                    <div className={`w-2 h-2 rounded-full bg-${color}-500`}></div>
+                    <span>{completeness.toFixed(0)}% complete</span>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
       </div>
       </div>
     </div>

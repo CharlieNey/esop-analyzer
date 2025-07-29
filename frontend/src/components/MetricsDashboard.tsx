@@ -65,7 +65,7 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     );
   }
 
-  // Helper function to safely parse numeric values
+  // Helper function to safely parse numeric values with improved accuracy
   const safeParseNumber = (value: any): number | null => {
     if (value === null || value === undefined || value === '') {
       return null;
@@ -73,9 +73,22 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     
     // Handle string values
     if (typeof value === 'string') {
-      // Remove common formatting characters
-      const cleaned = value.replace(/[\$,\s%]/g, '');
+      // Remove common formatting characters, including parentheses for negative values
+      let cleaned = value.replace(/[\$,\s%()]/g, '');
+      
+      // Handle negative values in parentheses format
+      if (value.includes('(') && value.includes(')')) {
+        cleaned = '-' + cleaned;
+      }
+      
+      // Handle percentage values
+      if (value.includes('%')) {
+        const parsed = parseFloat(cleaned);
+        return isNaN(parsed) ? null : parsed;
+      }
+      
       const parsed = parseFloat(cleaned);
+      // Only return null if actually NaN, allow zero values
       return isNaN(parsed) ? null : parsed;
     }
     
@@ -87,15 +100,35 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     return null;
   };
 
-  // Helper to get best available value with priority order
+  // Helper to get best available value with priority order and validation
   const getBestValue = (...sources: any[]): number | null => {
+    const validValues: number[] = [];
+    
     for (const source of sources) {
       const parsed = safeParseNumber(source);
-      if (parsed !== null) {
-        return parsed;
+      if (parsed !== null && !isNaN(parsed)) {
+        validValues.push(parsed);
       }
     }
-    return null;
+    
+    if (validValues.length === 0) return null;
+    
+    // If we have multiple values, prefer the first one but log inconsistencies
+    if (validValues.length > 1 && process.env.NODE_ENV === 'development') {
+      const variance = Math.max(...validValues) - Math.min(...validValues);
+      const avgValue = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+      const percentVariance = (variance / avgValue) * 100;
+      
+      if (percentVariance > 10) {
+        console.warn('📊 Data inconsistency detected:', {
+          sources: sources.filter(s => s !== null && s !== undefined),
+          validValues,
+          percentVariance: percentVariance.toFixed(1) + '%'
+        });
+      }
+    }
+    
+    return validValues[0];
   };
 
   const companyVal = metrics.metrics.companyValuation?.data;
@@ -104,13 +137,38 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
   const discountRates = metrics.metrics.discountRates?.data;
   const valuationMultiples = metrics.metrics.valuationMultiples?.data;
 
+  // Enhanced data extraction with more comprehensive field mapping
+  const extractAllMetricsFields = (metrics: any) => {
+    const allFields: any = {};
+    
+    // Recursively extract all fields from the metrics object
+    const extractFields = (obj: any, prefix = '') => {
+      for (const [key, value] of Object.entries(obj || {})) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          extractFields(value, fullKey);
+        } else {
+          allFields[fullKey] = value;
+        }
+      }
+    };
+    
+    extractFields(metrics.metrics);
+    return allFields;
+  };
+  
+  const allFields = extractAllMetricsFields(metrics);
+  
   const financialData = keyFinancials ? [
     { 
       name: 'Revenue', 
       value: getBestValue(
         keyFinancials.revenue, 
         keyFinancials.totalRevenue, 
-        keyFinancials.annualRevenue
+        keyFinancials.annualRevenue,
+        keyFinancials.grossRevenue,
+        allFields['keyFinancials.data.revenue'],
+        allFields['financials.revenue']
       ) || 0 
     },
     { 
@@ -118,14 +176,20 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
       value: getBestValue(
         keyFinancials.ebitda, 
         keyFinancials.EBITDA, 
-        keyFinancials.adjustedEbitda
+        keyFinancials.adjustedEbitda,
+        keyFinancials.normalizedEbitda,
+        allFields['keyFinancials.data.ebitda'],
+        allFields['financials.ebitda']
       ) || 0 
     },
     { 
       name: 'Net Income', 
       value: getBestValue(
         keyFinancials.netIncome, 
-        keyFinancials.netProfit
+        keyFinancials.netProfit,
+        keyFinancials.netEarnings,
+        allFields['keyFinancials.data.netIncome'],
+        allFields['financials.netIncome']
       ) || 0 
     },
   ].filter(item => item.value > 0) : [];
@@ -134,11 +198,15 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     const totalShares = getBestValue(
       capitalStructure.totalShares,
       capitalStructure.totalSharesOutstanding,
-      capitalStructure.sharesOutstanding
+      capitalStructure.sharesOutstanding,
+      capitalStructure.outstandingShares,
+      allFields['capitalStructure.data.totalShares']
     );
     const esopShares = getBestValue(
       capitalStructure.esopShares,
-      capitalStructure.employeeShares
+      capitalStructure.employeeShares,
+      capitalStructure.esopSharesOutstanding,
+      allFields['capitalStructure.data.esopShares']
     );
     
     if (totalShares && esopShares) {
@@ -242,7 +310,10 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
             const value = getBestValue(
               companyVal?.totalValue,
               companyVal?.value,
-              companyVal?.companyValue
+              companyVal?.companyValue,
+              companyVal?.enterpriseValue,
+              allFields['companyValuation.data.totalValue'],
+              allFields['valuation.companyValue']
             );
             return value ? formatCurrency(value) : 'N/A';
           })()}
@@ -255,7 +326,10 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
             const value = getBestValue(
               companyVal?.perShareValue,
               companyVal?.sharePrice,
-              companyVal?.pricePerShare
+              companyVal?.pricePerShare,
+              companyVal?.valuationPerShare,
+              allFields['companyValuation.data.perShareValue'],
+              allFields['valuation.perShareValue']
             );
             return value ? formatCurrency(value) : 'N/A';
           })()}
@@ -268,7 +342,9 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
             const value = getBestValue(
               capitalStructure?.esopPercentage,
               capitalStructure?.esopOwnership,
-              capitalStructure?.employeeOwnership
+              capitalStructure?.employeeOwnership,
+              capitalStructure?.esopOwnershipPercentage,
+              allFields['capitalStructure.data.esopPercentage']
             );
             return value ? formatPercent(value) : 'N/A';
           })()}
@@ -281,7 +357,10 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
             const value = getBestValue(
               discountRates?.discountRate,
               discountRates?.wacc,
-              keyFinancials?.discountRate
+              keyFinancials?.discountRate,
+              keyFinancials?.wacc,
+              allFields['discountRates.data.discountRate'],
+              allFields['valuation.discountRate']
             );
             return value ? formatPercent(value) : 'N/A';
           })()}
