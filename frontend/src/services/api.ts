@@ -111,6 +111,13 @@ export const getMetricsSummary = async (documentId: string): Promise<any> => {
   return response.data;
 };
 
+export const validateMetrics = async (documentId: string, metrics: any): Promise<any> => {
+  const response = await api.post(`/metrics/validate/${documentId}`, { metrics }, {
+    timeout: 60000, // 1 minute for AI validation
+  });
+  return response.data;
+};
+
 export const healthCheck = async (): Promise<any> => {
   const response = await api.get('/health');
   return response.data;

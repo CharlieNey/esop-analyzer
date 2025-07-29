@@ -1,5 +1,6 @@
 import express from 'express';
 import { pool } from '../models/database.js';
+import { answerQuestion } from '../services/openaiService.js';
 
 const router = express.Router();
 
@@ -101,6 +102,116 @@ router.get('/summary/:documentId', async (req, res) => {
     
   } catch (error) {
     console.error('Get metrics summary error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/validate/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { metrics } = req.body;
+    
+    if (!metrics || typeof metrics !== 'object') {
+      return res.status(400).json({ error: 'Metrics object is required' });
+    }
+    
+    const client = await pool.connect();
+    try {
+      // Get document content
+      const documentResult = await client.query(
+        'SELECT content_text FROM documents WHERE id = $1',
+        [documentId]
+      );
+      
+      if (documentResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+      
+      const documentText = documentResult.rows[0].content_text;
+      
+      // Create validation questions for each metric
+      const validationResults = {};
+      
+      const validationQueries = [
+        {
+          key: 'enterpriseValue',
+          question: `What is the total enterprise value or company valuation mentioned in this document? Please provide the exact number with units (millions/billions).`,
+          currentValue: metrics.enterpriseValue
+        },
+        {
+          key: 'valueOfEquity',
+          question: `What is the total value of equity mentioned in this document? Please provide the exact number with units.`,
+          currentValue: metrics.valueOfEquity
+        },
+        {
+          key: 'valuationPerShare',
+          question: `What is the fair market value per share or price per share mentioned in this document? Please provide the exact number.`,
+          currentValue: metrics.valuationPerShare
+        },
+        {
+          key: 'revenue',
+          question: `What is the company's annual revenue mentioned in this document? Please provide the exact number with units.`,
+          currentValue: metrics.revenue
+        },
+        {
+          key: 'ebitda',
+          question: `What is the company's EBITDA mentioned in this document? Please provide the exact number with units.`,
+          currentValue: metrics.ebitda
+        },
+        {
+          key: 'discountRate',
+          question: `What is the discount rate or weighted average cost of capital (WACC) mentioned in this document? Please provide the exact percentage.`,
+          currentValue: metrics.discountRate
+        }
+      ];
+      
+      // Process each validation query
+      for (const query of validationQueries) {
+        if (query.currentValue !== null && query.currentValue !== undefined) {
+          try {
+            console.log(`🔍 Validating ${query.key}: ${query.currentValue}`);
+            
+            const validationPrompt = `${query.question}
+            
+Current extracted value: ${query.currentValue}
+
+Please respond in this exact format:
+EXTRACTED_VALUE: [the exact value you find in the document, or "NOT_FOUND" if not mentioned]
+CONFIDENCE: [High/Medium/Low]
+MATCHES_CURRENT: [Yes/No]
+EXPLANATION: [brief explanation of what you found and why it matches or doesn't match]`;
+
+            const aiResponse = await answerQuestion(validationPrompt, documentText);
+            
+            validationResults[query.key] = {
+              currentValue: query.currentValue,
+              aiValidation: aiResponse,
+              query: query.question
+            };
+            
+          } catch (error) {
+            console.error(`Error validating ${query.key}:`, error);
+            validationResults[query.key] = {
+              currentValue: query.currentValue,
+              error: 'Validation failed',
+              query: query.question
+            };
+          }
+        }
+      }
+      
+      res.json({
+        documentId,
+        validationResults,
+        timestamp: new Date().toISOString()
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Metrics validation error:', error);
     res.status(500).json({ error: error.message });
   }
 });

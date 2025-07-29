@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { DollarSign, TrendingUp, Users, Percent } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
+import MetricsValidation from './MetricsValidation';
 
 interface MetricsDashboardProps {
   documentId: string;
@@ -64,6 +65,39 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     );
   }
 
+  // Helper function to safely parse numeric values
+  const safeParseNumber = (value: any): number | null => {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    
+    // Handle string values
+    if (typeof value === 'string') {
+      // Remove common formatting characters
+      const cleaned = value.replace(/[\$,\s%]/g, '');
+      const parsed = parseFloat(cleaned);
+      return isNaN(parsed) ? null : parsed;
+    }
+    
+    // Handle numeric values
+    if (typeof value === 'number') {
+      return isNaN(value) ? null : value;
+    }
+    
+    return null;
+  };
+
+  // Helper to get best available value with priority order
+  const getBestValue = (...sources: any[]): number | null => {
+    for (const source of sources) {
+      const parsed = safeParseNumber(source);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+    return null;
+  };
+
   const companyVal = metrics.metrics.companyValuation?.data;
   const keyFinancials = metrics.metrics.keyFinancials?.data;
   const capitalStructure = metrics.metrics.capitalStructure?.data;
@@ -71,24 +105,81 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
   const valuationMultiples = metrics.metrics.valuationMultiples?.data;
 
   const financialData = keyFinancials ? [
-    { name: 'Revenue', value: parseFloat(keyFinancials.revenue) || 0 },
-    { name: 'EBITDA', value: parseFloat(keyFinancials.ebitda) || 0 },
-    { name: 'Net Income', value: parseFloat(keyFinancials.netIncome) || 0 },
-  ] : [];
+    { 
+      name: 'Revenue', 
+      value: getBestValue(
+        keyFinancials.revenue, 
+        keyFinancials.totalRevenue, 
+        keyFinancials.annualRevenue
+      ) || 0 
+    },
+    { 
+      name: 'EBITDA', 
+      value: getBestValue(
+        keyFinancials.ebitda, 
+        keyFinancials.EBITDA, 
+        keyFinancials.adjustedEbitda
+      ) || 0 
+    },
+    { 
+      name: 'Net Income', 
+      value: getBestValue(
+        keyFinancials.netIncome, 
+        keyFinancials.netProfit
+      ) || 0 
+    },
+  ].filter(item => item.value > 0) : [];
 
-  const capitalData = capitalStructure ? [
-    { name: 'ESOP Shares', value: parseFloat(capitalStructure.esopShares) || 0 },
-    { name: 'Other Shares', value: (parseFloat(capitalStructure.totalShares) || 0) - (parseFloat(capitalStructure.esopShares) || 0) },
-  ] : [];
+  const capitalData = capitalStructure ? (() => {
+    const totalShares = getBestValue(
+      capitalStructure.totalShares,
+      capitalStructure.totalSharesOutstanding,
+      capitalStructure.sharesOutstanding
+    );
+    const esopShares = getBestValue(
+      capitalStructure.esopShares,
+      capitalStructure.employeeShares
+    );
+    
+    if (totalShares && esopShares) {
+      return [
+        { name: 'ESOP Shares', value: esopShares },
+        { name: 'Other Shares', value: totalShares - esopShares },
+      ];
+    }
+    return [];
+  })() : [];
 
   const formatCurrency = (value: string | number) => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(num || 0);
+    
+    // For very large numbers, use compact notation
+    if (num >= 1000000000) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+        notation: 'compact',
+        compactDisplay: 'short'
+      }).format(num || 0);
+    } else if (num >= 1000000) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+        notation: 'compact',
+        compactDisplay: 'short'
+      }).format(num || 0);
+    } else {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(num || 0);
+    }
   };
 
   const formatPercent = (value: string | number) => {
@@ -96,35 +187,104 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     return `${(num || 0).toFixed(2)}%`;
   };
 
+  // Prepare metrics for validation
+  const validationMetrics = {
+    enterpriseValue: getBestValue(
+      companyVal?.totalValue,
+      companyVal?.value,
+      companyVal?.companyValue
+    ),
+    valueOfEquity: getBestValue(
+      companyVal?.totalValue,
+      companyVal?.value,
+      companyVal?.companyValue
+    ),
+    valuationPerShare: getBestValue(
+      companyVal?.perShareValue,
+      companyVal?.sharePrice,
+      companyVal?.pricePerShare
+    ),
+    revenue: getBestValue(
+      keyFinancials?.revenue,
+      keyFinancials?.totalRevenue,
+      keyFinancials?.annualRevenue
+    ),
+    ebitda: getBestValue(
+      keyFinancials?.ebitda,
+      keyFinancials?.EBITDA,
+      keyFinancials?.adjustedEbitda
+    ),
+    discountRate: getBestValue(
+      discountRates?.discountRate,
+      discountRates?.wacc,
+      keyFinancials?.discountRate
+    ),
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">ESOP Valuation Dashboard</h2>
-        <span className="text-sm text-gray-500">{metrics.filename}</span>
-      </div>
+    <div className="space-y-6">
+      {/* AI Validation Section */}
+      <MetricsValidation 
+        documentId={documentId} 
+        metrics={validationMetrics}
+      />
+      
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">ESOP Valuation Dashboard</h2>
+          <span className="text-sm text-gray-500">{metrics.filename}</span>
+        </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <MetricCard
           title="Company Value"
-          value={companyVal ? formatCurrency(companyVal.totalValue) : 'N/A'}
+          value={(() => {
+            const value = getBestValue(
+              companyVal?.totalValue,
+              companyVal?.value,
+              companyVal?.companyValue
+            );
+            return value ? formatCurrency(value) : 'N/A';
+          })()}
           icon={<DollarSign className="h-6 w-6" />}
           color="blue"
         />
         <MetricCard
           title="Per Share Value"
-          value={companyVal ? formatCurrency(companyVal.perShareValue) : 'N/A'}
+          value={(() => {
+            const value = getBestValue(
+              companyVal?.perShareValue,
+              companyVal?.sharePrice,
+              companyVal?.pricePerShare
+            );
+            return value ? formatCurrency(value) : 'N/A';
+          })()}
           icon={<TrendingUp className="h-6 w-6" />}
           color="green"
         />
         <MetricCard
           title="ESOP Ownership"
-          value={capitalStructure ? formatPercent(capitalStructure.esopPercentage) : 'N/A'}
+          value={(() => {
+            const value = getBestValue(
+              capitalStructure?.esopPercentage,
+              capitalStructure?.esopOwnership,
+              capitalStructure?.employeeOwnership
+            );
+            return value ? formatPercent(value) : 'N/A';
+          })()}
           icon={<Users className="h-6 w-6" />}
           color="yellow"
         />
         <MetricCard
           title="Discount Rate"
-          value={discountRates ? formatPercent(discountRates.discountRate) : 'N/A'}
+          value={(() => {
+            const value = getBestValue(
+              discountRates?.discountRate,
+              discountRates?.wacc,
+              keyFinancials?.discountRate
+            );
+            return value ? formatPercent(value) : 'N/A';
+          })()}
           icon={<Percent className="h-6 w-6" />}
           color="red"
         />
@@ -138,8 +298,24 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
               <BarChart data={financialData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis tickFormatter={(value) => formatCurrency(value)} />
-                <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                <YAxis 
+                  tickFormatter={(value) => {
+                    const num = typeof value === 'string' ? parseFloat(value) : value;
+                    if (num >= 1000000) {
+                      return new Intl.NumberFormat('en-US', {
+                        notation: 'compact',
+                        compactDisplay: 'short'
+                      }).format(num);
+                    }
+                    return formatCurrency(value);
+                  }} 
+                />
+                <Tooltip 
+                  formatter={(value) => {
+                    const num = typeof value === 'string' ? parseFloat(value) : value;
+                    return formatCurrency(num as number);
+                  }} 
+                />
                 <Bar dataKey="value" fill="#3b82f6" />
               </BarChart>
             </ResponsiveContainer>
@@ -161,7 +337,7 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {capitalData.map((entry, index) => (
+                  {capitalData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -178,19 +354,34 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">
-                {parseFloat(valuationMultiples.revenueMultiple)?.toFixed(1) || 'N/A'}x
+                {(() => {
+                  const value = getBestValue(
+                    valuationMultiples.revenueMultiple,
+                    valuationMultiples.revenue_multiple,
+                    valuationMultiples.priceToRevenue
+                  );
+                  return value ? `${value.toFixed(1)}x` : 'N/A';
+                })()}
               </div>
               <div className="text-sm text-gray-500">Revenue Multiple</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {parseFloat(valuationMultiples.ebitdaMultiple)?.toFixed(1) || 'N/A'}x
+                {(() => {
+                  const value = getBestValue(
+                    valuationMultiples.ebitdaMultiple,
+                    valuationMultiples.ebitda_multiple,
+                    valuationMultiples.priceToEbitda
+                  );
+                  return value ? `${value.toFixed(1)}x` : 'N/A';
+                })()}
               </div>
               <div className="text-sm text-gray-500">EBITDA Multiple</div>
             </div>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
@@ -210,12 +401,21 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, icon, color }) =>
     red: 'bg-red-50 text-red-600',
   };
 
+  // Helper function to determine font size based on value length
+  const getFontSizeClass = (value: string): string => {
+    if (value === 'N/A') return 'text-lg';
+    if (value.length <= 8) return 'text-lg';
+    if (value.length <= 12) return 'text-base';
+    if (value.length <= 16) return 'text-sm';
+    return 'text-xs';
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="text-lg font-semibold text-gray-900">{value}</p>
+          <p className={`${getFontSizeClass(value)} font-semibold text-gray-900 leading-tight`}>{value}</p>
         </div>
         <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
           {icon}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MessageCircle, ExternalLink, FileText, TrendingUp, DollarSign, Percent, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, MessageCircle, ExternalLink, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { askQuestion } from '../services/api';
 import { QuestionResponse } from '../types';
 import { formatFinancialContent } from '../utils/markdownRenderer';
@@ -17,16 +17,38 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
   // Refs for auto-scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Clear previous responses when document changes
   React.useEffect(() => {
     setResponses([]);
   }, [documentId]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to top of the newest answer
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [responses]);
+    if (responses.length > 0 && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      
+      // Find all answer elements (gray background)
+      const answerElements = container.querySelectorAll('.bg-gray-50');
+      
+      if (answerElements.length > 0) {
+        // Get the last (newest) answer element
+        const lastAnswerElement = answerElements[answerElements.length - 1] as HTMLElement;
+        
+        // Scroll to the top of the answer element
+        const scrollTop = lastAnswerElement.offsetTop - container.offsetTop - 20; // 20px padding above
+        
+        container.scrollTo({
+          top: scrollTop,
+          behavior: 'smooth'
+        });
+      }
+    } else if (isLoading && messagesEndRef.current) {
+      // If loading and no messages yet, scroll to bottom
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [responses, isLoading]);
 
   const exampleQuestions = [
     "What is the company's total valuation?",
@@ -43,7 +65,7 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
     setIsLoading(true);
     try {
       const response = await askQuestion(question, documentId);
-      setResponses(prev => [response, ...prev]);
+      setResponses(prev => [...prev, response]);
       setQuestion('');
       // Focus back to input after submission
       inputRef.current?.focus();
@@ -80,7 +102,7 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {responses.length === 0 && (
           <div className="text-center text-gray-500 py-8">
             <MessageCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
