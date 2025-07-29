@@ -1,0 +1,67 @@
+import pkg from 'pg';
+import dotenv from 'dotenv';
+
+const { Pool } = pkg;
+dotenv.config();
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+export const initializeDatabase = async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        filename VARCHAR(255) NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        content_text TEXT,
+        metadata JSONB DEFAULT '{}',
+        processed_at TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_chunks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+        chunk_text TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        page_number INTEGER,
+        embedding vector(1536),
+        metadata JSONB DEFAULT '{}'
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS extracted_metrics (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+        metric_type VARCHAR(100) NOT NULL,
+        metric_value TEXT,
+        metric_data JSONB DEFAULT '{}',
+        confidence_score FLOAT DEFAULT 0.0,
+        extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding 
+      ON document_chunks USING ivfflat (embedding vector_cosine_ops)
+    `);
+
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export { pool };
