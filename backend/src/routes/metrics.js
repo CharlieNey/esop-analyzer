@@ -274,7 +274,7 @@ router.get('/ai/:documentId', async (req, res) => {
           
           // Find sections containing relevant keywords
           keywords.forEach(keyword => {
-            const regex = new RegExp(\`.\{0,500\}\${keyword}.\{0,1000\}\`, 'gi');
+            const regex = new RegExp(`.{0,500}${keyword}.{0,1000}`, 'gi');
             const matches = content.match(regex);
             if (matches) {
               sections.push(...matches);
@@ -292,16 +292,16 @@ router.get('/ai/:documentId', async (req, res) => {
             
             let response;
             if (relevantSections.length > 0) {
-              console.log(\`📍 Found \${relevantSections.length} relevant sections for \${metricName}\`);
-              const sectionsText = relevantSections.join('\\n\\n---SECTION---\\n\\n').substring(0, 8000);
-              const sectionQuestion = \`\${question}\\n\\nFocus on these relevant sections from the document:\\n\${sectionsText}\`;
+              console.log(`📍 Found ${relevantSections.length} relevant sections for ${metricName}`);
+              const sectionsText = relevantSections.join('\n\n---SECTION---\n\n').substring(0, 8000);
+              const sectionQuestion = `${question}\n\nFocus on these relevant sections from the document:\n${sectionsText}`;
               response = await answerQuestion(sectionQuestion, ''); // Empty context since we provided sections
             } else {
-              console.log(\`📄 Using full document for \${metricName}\`);
+              console.log(`📄 Using full document for ${metricName}`);
               response = await answerQuestion(question, document.content_text);
             }
             
-            console.log(\`📊 \${metricName} AI response:\`, response.substring(0, 200));
+            console.log(`📊 ${metricName} AI response:`, response.substring(0, 200));
             
             // Extract numbers from response with comprehensive parsing
             console.log(`🔍 Full AI response for ${metricName}: "${response}"`);
