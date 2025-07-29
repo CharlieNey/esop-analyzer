@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Building, Users, Calculator, BarChart3, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Building, Users, Calculator, BarChart3, Minus, Download } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 interface EnhancedMetricsDashboardProps {
   documentId: string;
@@ -56,6 +58,28 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
   const calculatePercentageChange = (current: number | null, previous: number | null): number | null => {
     if (!current || !previous || previous === 0) return null;
     return ((current - previous) / previous) * 100;
+  };
+
+  // Download handler
+  const handleDownload = async () => {
+    const dashboard = document.getElementById('dashboard-capture');
+    if (!dashboard) return;
+    
+    const canvas = await html2canvas(dashboard, { 
+      useCORS: true,
+      allowTaint: true,
+      background: '#fff'
+    });
+    
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit: 'px',
+      format: [canvas.width, canvas.height]
+    });
+    
+    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(`${metrics?.filename || 'dashboard'}.pdf`);
   };
 
   if (loading) {
@@ -152,57 +176,70 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
+      {/* Header with title, filename, valuation date, and download icon */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">ESOP Valuation Dashboard</h2>
-        <span className="text-sm text-gray-500">{metrics.filename}</span>
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">ESOP Valuation Dashboard</h2>
+          <div className="flex flex-col md:flex-row md:items-center md:space-x-4 mt-1">
+            <span className="text-sm text-gray-500">{metrics.filename}</span>
+            <span className="text-sm text-gray-600">
+              Valuation Date: {metrics.valuationDate 
+                ? new Date(metrics.valuationDate).toLocaleDateString()
+                : new Date(metrics.uploadDate).toLocaleDateString()
+              }
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={handleDownload}
+          className="p-2 rounded hover:bg-blue-100 transition-colors"
+          title="Download Dashboard"
+        >
+          <Download className="h-6 w-6 text-blue-600" />
+        </button>
       </div>
+      {/* Dashboard content to capture */}
+      <div id="dashboard-capture">
+        {/* Metric Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {metricCards.map((card, index) => (
+            <MetricCard key={index} {...card} />
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {metricCards.map((card, index) => (
-          <MetricCard key={index} {...card} />
-        ))}
-      </div>
-
-      {/* Additional Summary Section */}
-      <div className="mt-8 pt-6 border-t border-gray-200">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Key Insights</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {capitalStructure && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-medium text-gray-900 mb-2">Ownership Structure</h4>
-              <div className="text-sm text-gray-600">
-                <div className="flex justify-between">
-                  <span>Total Shares Outstanding:</span>
-                  <span className="font-medium">{parseFloat(capitalStructure.totalShares)?.toLocaleString() || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>ESOP Ownership:</span>
-                  <span className="font-medium">{capitalStructure.esopPercentage}%</span>
+        {/* Additional Summary Section */}
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Key Insights</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {capitalStructure && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-2">Ownership Structure</h4>
+                <div className="text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Total Shares Outstanding:</span>
+                    <span className="font-medium">{parseFloat(capitalStructure.totalShares)?.toLocaleString() || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ESOP Ownership:</span>
+                    <span className="font-medium">{capitalStructure.esopPercentage}%</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-900 mb-2">Financial Ratios</h4>
-            <div className="text-sm text-gray-600">
-              {keyFinancials?.revenue && keyFinancials?.ebitda && (
-                <div className="flex justify-between">
-                  <span>EBITDA Margin:</span>
-                  <span className="font-medium">
-                    {((parseFloat(keyFinancials.ebitda) / parseFloat(keyFinancials.revenue)) * 100).toFixed(1)}%
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span>Valuation Date:</span>
-                <span className="font-medium">
-                  {metrics.valuationDate 
-                    ? new Date(metrics.valuationDate).toLocaleDateString()
-                    : new Date(metrics.uploadDate).toLocaleDateString()
-                  }
-                </span>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="font-medium text-gray-900 mb-2">Financial Ratios</h4>
+              <div className="text-sm text-gray-600">
+                {keyFinancials?.revenue && keyFinancials?.ebitda && (
+                  <div className="flex justify-between">
+                    <span>EBITDA Margin:</span>
+                    <span className="font-medium">
+                      {((parseFloat(keyFinancials.ebitda) / parseFloat(keyFinancials.revenue)) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+                {/* Removed valuation date from here since it's now in the header */}
               </div>
             </div>
           </div>
