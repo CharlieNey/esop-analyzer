@@ -6,7 +6,10 @@ dotenv.config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  query_timeout: parseInt(process.env.PROCESSING_TIMEOUT) || 900000, // 15 minutes for long operations
+  connectionTimeoutMillis: 30000, // 30 seconds to establish connection
+  idleTimeoutMillis: 600000, // 10 minutes idle timeout
 });
 
 export const initializeDatabase = async () => {

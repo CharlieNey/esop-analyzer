@@ -69,7 +69,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
   
@@ -78,3 +78,11 @@ app.listen(PORT, () => {
     jobService.cleanupOldJobs(7); // Clean jobs older than 7 days
   });
 });
+
+// Increase server timeout for long-running operations
+const requestTimeout = parseInt(process.env.REQUEST_TIMEOUT) || 600000; // 10 minutes default
+server.timeout = requestTimeout;
+server.keepAliveTimeout = 65000; // Keep alive connections
+server.headersTimeout = 66000; // Slightly longer than keep-alive
+
+console.log(`Request timeout set to: ${requestTimeout}ms (${Math.round(requestTimeout/60000)} minutes)`);

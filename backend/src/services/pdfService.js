@@ -114,41 +114,108 @@ END OF EXTRACTED TEXT
         [documentId, filename, filePath, fullText]
       );
       
-      // Store each page as properly sized chunks with page number metadata
+      // Prepare all chunks first
+      const allChunks = [];
       let globalChunkIndex = 0;
       
       for (let i = 0; i < pageData.length; i++) {
         const page = pageData[i];
-        
-        // Chunk each page into smaller pieces if it's too large
         const pageChunks = chunkPageContent(page.content, page.pageNumber);
         console.log(`📄 Page ${page.pageNumber}: ${page.content.length} chars → ${pageChunks.length} chunks`);
         
         for (const chunk of pageChunks) {
-          // Try OpenAI embedding, fallback to mock if quota exceeded
-          let embedding;
-          try {
-            embedding = await createEmbedding(chunk.text);
-            console.log(`✅ Created real OpenAI embedding for page ${chunk.pageNumber} chunk ${chunk.chunkIndex}`);
-          } catch (embeddingError) {
-            console.log(`⚠️ OpenAI embedding failed (${embeddingError.message}), using mock embedding`);
-            // Create mock embedding as fallback
-            embedding = Array(1536).fill(0).map(() => Math.random() - 0.5);
-          }
-          
-          await client.query(
-            'INSERT INTO document_chunks (document_id, chunk_text, chunk_index, embedding, metadata) VALUES ($1, $2, $3, $4, $5)',
-            [documentId, chunk.text, globalChunkIndex, JSON.stringify(embedding), JSON.stringify({ 
-              pageNumber: chunk.pageNumber, 
-              pageType: 'chunk',
-              chunkIndex: chunk.chunkIndex,
-              totalChunksInPage: pageChunks.length
-            })]
-          );
-          
+          allChunks.push({
+            ...chunk,
+            globalIndex: globalChunkIndex,
+            totalChunksInPage: pageChunks.length
+          });
           globalChunkIndex++;
         }
       }
+      
+      console.log(`🚀 Creating ${allChunks.length} embeddings in parallel...`);
+      const startTime = Date.now();
+      
+      // Report progress to job service if available
+      const reportProgress = (current, total, stage) => {
+        if (global.currentJobId) {
+          import('./jobService.js').then(({ jobService }) => {
+            const percent = Math.round((current / total) * 100);
+            jobService.updateJobStatus(
+              global.currentJobId, 
+              'processing', 
+              `${stage}: ${current}/${total} (${percent}%)`
+            );
+          });
+        }
+      };
+      
+      // Create embeddings in parallel with concurrency control
+      const EMBEDDING_CONCURRENCY = parseInt(process.env.EMBEDDING_CONCURRENCY) || 5;
+      const embeddingPromises = [];
+      
+      for (let i = 0; i < allChunks.length; i += EMBEDDING_CONCURRENCY) {
+        const batch = allChunks.slice(i, i + EMBEDDING_CONCURRENCY);
+        const batchPromises = batch.map(async (chunk, batchIndex) => {
+          try {
+            const embedding = await createEmbedding(chunk.text);
+            const completed = i + batchIndex + 1;
+            console.log(`✅ Created embedding for page ${chunk.pageNumber} chunk ${chunk.chunkIndex} (${completed}/${allChunks.length})`);
+            reportProgress(completed, allChunks.length, 'Creating embeddings');
+            return { ...chunk, embedding, success: true };
+          } catch (embeddingError) {
+            console.log(`⚠️ Embedding failed for chunk ${i + batchIndex + 1}, using mock`);
+            const mockEmbedding = Array(1536).fill(0).map(() => Math.random() - 0.5);
+            const completed = i + batchIndex + 1;
+            reportProgress(completed, allChunks.length, 'Creating embeddings');
+            return { ...chunk, embedding: mockEmbedding, success: false };
+          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        embeddingPromises.push(...batchResults);
+      }
+      
+      const embeddingTime = Date.now() - startTime;
+      console.log(`⚡ Created ${allChunks.length} embeddings in ${embeddingTime}ms (${Math.round(embeddingTime/allChunks.length)}ms per embedding)`);
+      
+      // Batch insert all chunks at once using multi-row insert
+      console.log(`💾 Batch inserting ${embeddingPromises.length} chunks into database...`);
+      const insertStartTime = Date.now();
+      
+      if (embeddingPromises.length > 0) {
+        const values = [];
+        const placeholders = [];
+        let paramIndex = 1;
+        
+        embeddingPromises.forEach((chunkWithEmbedding, index) => {
+          values.push(
+            documentId,
+            chunkWithEmbedding.text,
+            chunkWithEmbedding.globalIndex,
+            JSON.stringify(chunkWithEmbedding.embedding),
+            JSON.stringify({
+              pageNumber: chunkWithEmbedding.pageNumber,
+              pageType: 'chunk',
+              chunkIndex: chunkWithEmbedding.chunkIndex,
+              totalChunksInPage: chunkWithEmbedding.totalChunksInPage
+            })
+          );
+          
+          placeholders.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4})`);
+          paramIndex += 5;
+        });
+        
+        const insertQuery = `
+          INSERT INTO document_chunks (document_id, chunk_text, chunk_index, embedding, metadata) 
+          VALUES ${placeholders.join(', ')}
+        `;
+        
+        await client.query(insertQuery, values);
+      }
+      
+      const insertTime = Date.now() - insertStartTime;
+      console.log(`⚡ Batch database insert completed in ${insertTime}ms`);
       
       await client.query('COMMIT');
       

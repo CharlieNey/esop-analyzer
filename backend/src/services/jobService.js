@@ -35,6 +35,9 @@ class JobService {
     console.log(`🚀 Starting background processing for job ${jobId}`);
     
     try {
+      // Set global job ID for progress tracking
+      global.currentJobId = jobId;
+      
       // Get job details
       const job = await this.getJob(jobId);
       if (!job) {

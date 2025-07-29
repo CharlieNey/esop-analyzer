@@ -10,6 +10,8 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
   const [uploadStatus, setUploadStatus] = useState<{
     type: 'success' | 'error' | 'processing' | null;
@@ -53,6 +55,8 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     setIsProcessing(false);
+    setUploadProgress(0);
+    setProcessingProgress(0);
     setUploadStatus({ type: null, message: '' });
     setProgressMessage('');
 
@@ -63,7 +67,9 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
         message: `Uploading ${file.name}...`
       });
       
-      const uploadResult = await uploadPDF(file);
+      const uploadResult = await uploadPDF(file, (progressEvent) => {
+        setUploadProgress(progressEvent.progress);
+      });
       
       // Step 2: Start polling for processing status
       setIsUploading(false);
@@ -76,11 +82,14 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
       const jobResult = await pollJobUntilComplete(
         uploadResult.jobId,
         (status) => {
-          setProgressMessage(status.progressMessage || 'Processing...');
+          const message = status.progressMessage || 'Processing...';
+          setProgressMessage(message);
           setUploadStatus({
             type: 'processing',
-            message: status.progressMessage || 'Processing with AI...'
+            message: message
           });
+          
+          // No progress bar logic needed - just store the message for display
         }
       );
 
@@ -118,7 +127,7 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
             ? 'border-primary-500 bg-primary-50' 
             : 'border-gray-300 hover:border-primary-400'
           }
-          ${isUploading || isProcessing ? 'opacity-50 pointer-events-none' : ''}
+          ${isUploading || isProcessing ? 'pointer-events-none' : ''}
         `}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -126,11 +135,22 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
       >
         <div className="flex flex-col items-center space-y-4">
           {isUploading || isProcessing ? (
-            <div className="flex flex-col items-center space-y-2">
+            <div className="flex flex-col items-center space-y-4">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-              {isProcessing && (
-                <Clock className="h-6 w-6 text-primary-600 animate-pulse" />
-              )}
+              <div className="text-sm text-gray-600 text-center">
+                {isUploading ? (
+                  `Uploading ${uploadProgress}%`
+                ) : (
+                  progressMessage ? (
+                    progressMessage.includes('Processing PDF with Reducto') ? 'Processing PDF using Reducto AI...' :
+                    progressMessage.includes('Creating embeddings') ? 'Embedding document...' :
+                    progressMessage.includes('AI-powered metrics extraction') ? 'Extracting data...' :
+                    progressMessage.includes('comprehensive fallback') ? 'Extracting data...' :
+                    progressMessage.includes('Processing completed') ? 'Complete!' :
+                    'Processing...'
+                  ) : 'Processing...'
+                )}
+              </div>
             </div>
           ) : (
             <Upload className="h-12 w-12 text-gray-400" />
@@ -141,48 +161,47 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
               {isUploading 
                 ? 'Uploading...' 
                 : isProcessing 
-                ? 'Processing with AI...' 
+                ? '' 
                 : 'Drop your PDF here'
               }
             </p>
             <p className="text-sm text-gray-500 mt-1">
               {isUploading || isProcessing 
-                ? (progressMessage || 'Please wait...') 
+                ? '' 
                 : 'or click to browse files'
               }
             </p>
           </div>
           
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={handleFileInput}
-            className="hidden"
-            id="pdf-upload"
-            disabled={isUploading || isProcessing}
-          />
-          <label
-            htmlFor="pdf-upload"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 cursor-pointer disabled:opacity-50"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Choose PDF File
-          </label>
+          {!(isUploading || isProcessing) && (
+            <>
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleFileInput}
+                className="hidden"
+                id="pdf-upload"
+              />
+              <label
+                htmlFor="pdf-upload"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 cursor-pointer"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Choose PDF File
+              </label>
+            </>
+          )}
         </div>
       </div>
 
-      {uploadStatus.type && (
+      {uploadStatus.type && uploadStatus.type !== 'processing' && (
         <div className={`mt-4 p-4 rounded-md flex items-center space-x-2 ${
           uploadStatus.type === 'success' 
             ? 'bg-green-50 text-green-700'
-            : uploadStatus.type === 'processing'
-            ? 'bg-blue-50 text-blue-700'
             : 'bg-red-50 text-red-700'
         }`}>
           {uploadStatus.type === 'success' ? (
             <CheckCircle className="h-5 w-5" />
-          ) : uploadStatus.type === 'processing' ? (
-            <Clock className="h-5 w-5 animate-pulse" />
           ) : (
             <AlertCircle className="h-5 w-5" />
           )}

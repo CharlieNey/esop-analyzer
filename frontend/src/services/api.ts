@@ -5,10 +5,13 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 120000, // Increased to 2 minutes for general requests
 });
 
-export const uploadPDF = async (file: File): Promise<any> => {
+export const uploadPDF = async (
+  file: File, 
+  onUploadProgress?: (progressEvent: any) => void
+): Promise<any> => {
   const formData = new FormData();
   formData.append('pdf', file);
 
@@ -16,7 +19,16 @@ export const uploadPDF = async (file: File): Promise<any> => {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
-    timeout: 60000, // Increase timeout for file upload to 60 seconds
+    timeout: 180000, // Increased to 3 minutes for file upload
+    onUploadProgress: onUploadProgress ? (progressEvent) => {
+      const total = progressEvent.total || progressEvent.loaded;
+      const percentCompleted = Math.round((progressEvent.loaded * 100) / total);
+      onUploadProgress({
+        loaded: progressEvent.loaded,
+        total: total,
+        progress: percentCompleted
+      });
+    } : undefined,
   });
 
   return response.data;
@@ -30,7 +42,7 @@ export const getJobStatus = async (jobId: string): Promise<any> => {
 export const pollJobUntilComplete = async (
   jobId: string, 
   onProgress?: (status: any) => void,
-  timeoutMs: number = 300000 // 5 minutes default timeout
+  timeoutMs: number = 600000 // 10 minutes default timeout for long processing
 ): Promise<any> => {
   const startTime = Date.now();
   
@@ -83,6 +95,8 @@ export const askQuestion = async (
   const response = await api.post('/questions/ask', {
     question,
     documentId,
+  }, {
+    timeout: 180000, // 3 minutes for question answering
   });
   return response.data;
 };
