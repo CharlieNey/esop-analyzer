@@ -62,26 +62,37 @@ export const answerQuestion = async (question, context) => {
     
     const systemPrompt = `You are an expert financial analyst specializing in ESOP (Employee Stock Ownership Plan) valuation reports. 
 
+VISUAL CONTENT HANDLING:
+- When you see "TABLE X:" interpret and analyze the tabular data thoroughly
+- When you see "CHART X:" describe the visualization and extract key insights
+- When you see "IMAGE X:" reference any relevant visual information
+- Always reference both text content AND visual elements in your analysis
+- For financial data, prioritize table values and chart data over narrative text
+- When citing tables or charts, mention both the element type AND page number
+
 CRITICAL CITATION REQUIREMENTS:
-- You MUST explicitly mention page numbers in your answer (e.g., "According to Page 2..." or "As shown on Page 1...")
+- You MUST explicitly mention page numbers in your answer (e.g., "According to Page 2..." or "Table 1 on Page 2 shows...")
 - Every factual claim MUST reference the specific page where that information appears
 - Use the exact page numbers shown in the document content below (PAGE 1, PAGE 2, etc.)
+- When referencing visual elements, specify the element type (e.g., "Table 1 on Page 2", "Chart 2 on Page 3")
 - If information spans multiple pages, mention all relevant page numbers
 
 IMPORTANT: You MUST answer based ONLY on the document content provided below. If the information is not in the provided content, say "I cannot find that specific information in the provided document content" rather than making assumptions.
 
 When answering:
-1. Start each key point with a page reference (e.g., "Page 3 indicates that...")
-2. Use ONLY the information from the provided document pages
-3. Be specific and cite page numbers for EVERY piece of information
+1. Start each key point with a page reference (e.g., "Table 1 on Page 3 indicates that...")
+2. Use ONLY the information from the provided document pages and visual elements
+3. Be specific and cite page numbers AND element types for EVERY piece of information
 4. If asked about something not in the content, clearly state it's not available
-5. For financial figures, be precise with numbers, currency, AND page source
-6. Explain complex financial concepts in clear terms with page citations
+5. For financial figures, be precise with numbers, currency, AND source (table/chart/page)
+6. Explain complex financial concepts in clear terms with page and element citations
+7. When analyzing tables, reference specific rows/columns if helpful
+8. When describing charts, mention the chart type and key data points
 
 Document Content:
 ${finalContext}
 
-REMEMBER: Your answer must explicitly reference the page numbers that appear in the document content above. The user will see these same page numbers in the citations, so they must match your references.`;
+REMEMBER: Your answer must explicitly reference the page numbers AND visual elements that appear in the document content above. The user will see these same references in the citations, so they must match your analysis.`;
 
     // Use GPT-4 for larger context and better analysis
     const chatModel = process.env.CHAT_MODEL || 'gpt-4-1106-preview';
@@ -119,11 +130,16 @@ REMEMBER: Your answer must explicitly reference the page numbers that appear in 
 };
 
 const generateMockAnswer = (question, context) => {
-  // Enhanced keyword-based analysis that actually parses the document content
+  // Enhanced keyword-based analysis that handles visual content
   const lowerQuestion = question.toLowerCase();
   const lowerContext = context.toLowerCase();
   
-  // Extract actual values from the document content
+  // Check for visual content markers
+  const hasTable = context.includes('TABLE');
+  const hasChart = context.includes('CHART');
+  const hasImage = context.includes('IMAGE');
+  
+  // Extract actual values from the document content (including visual elements)
   const valuationMatch = context.match(/valuation:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
   const shareMatch = context.match(/per share value:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
   const discountMatch = context.match(/discount rate:?\s*([\d.]+)%?/i);
@@ -132,16 +148,26 @@ const generateMockAnswer = (question, context) => {
   const ebitdaMatch = context.match(/ebitda:?\s*\$?([\d,]+(?:\.\d{2})?)/i);
   const sharesMatch = context.match(/shares outstanding:?\s*([\d,]+)/i);
   
+  // Extract table/chart references
+  const tableMatch = context.match(/TABLE (\d+) \(Page (\d+)\)/i);
+  const chartMatch = context.match(/CHART (\d+) \(Page (\d+)\)/i);
+  
   // Answer based on what the user is asking and what's actually in the document
   if (lowerQuestion.includes('valuation') || lowerQuestion.includes('value')) {
     if (valuationMatch) {
-      return `Based on the document, the total company valuation is $${valuationMatch[1]}. This represents the enterprise value as determined by the ESOP valuation analysis.`;
+      let source = 'the document';
+      if (tableMatch) source = `Table ${tableMatch[1]} on Page ${tableMatch[2]}`;
+      else if (chartMatch) source = `Chart ${chartMatch[1]} on Page ${chartMatch[2]}`;
+      return `Based on ${source}, the total company valuation is $${valuationMatch[1]}. This represents the enterprise value as determined by the ESOP valuation analysis.`;
     }
   }
   
   if (lowerQuestion.includes('share') && !lowerQuestion.includes('outstanding')) {
     if (shareMatch) {
-      return `According to the valuation report, the per share value is $${shareMatch[1]}. This price reflects the fair market value per share for ESOP participants.`;
+      let source = 'the valuation report';
+      if (tableMatch) source = `Table ${tableMatch[1]} on Page ${tableMatch[2]}`;
+      else if (chartMatch) source = `Chart ${chartMatch[1]} on Page ${chartMatch[2]}`;
+      return `According to ${source}, the per share value is $${shareMatch[1]}. This price reflects the fair market value per share for ESOP participants.`;
     }
   }
   
@@ -175,8 +201,18 @@ const generateMockAnswer = (question, context) => {
     }
   }
   
+  // Handle questions specifically about tables or charts
+  if (lowerQuestion.includes('table') && hasTable) {
+    return `The document contains tabular data. ${tableMatch ? `Table ${tableMatch[1]} appears on Page ${tableMatch[2]}` : 'Tables are present in the document'} with financial information. Please refer to the specific table content for detailed values.`;
+  }
+  
+  if (lowerQuestion.includes('chart') && hasChart) {
+    return `The document contains chart visualizations. ${chartMatch ? `Chart ${chartMatch[1]} appears on Page ${chartMatch[2]}` : 'Charts are present in the document'} showing financial trends and data. Please refer to the specific chart analysis for insights.`;
+  }
+  
   // Fallback with actual document content
-  return `Based on the document content, here's what I found: ${context.substring(0, 300)}... Note: This analysis uses limited capabilities due to OpenAI quota limits, but is based on your actual document content.`;
+  const visualNote = (hasTable || hasChart || hasImage) ? ' This document includes visual elements (tables, charts, or images) that provide additional financial data.' : '';
+  return `Based on the document content, here's what I found: ${context.substring(0, 300)}...${visualNote} Note: This analysis uses limited capabilities due to OpenAI quota limits, but is based on your actual document content.`;
 };
 
 // Helper function to chunk text into smaller pieces

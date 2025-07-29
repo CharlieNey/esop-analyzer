@@ -27,15 +27,22 @@ export const processPDF = async (filePath, filename) => {
       
       console.log(`📁 File uploaded to Reducto: ${uploadResponse.file_id}`);
       
-      // Step 2: Parse the uploaded file
+      // Step 2: Parse the uploaded file with enhanced visual content extraction
       const parseResponse = await reducto.parse.run({
-        document_url: uploadResponse.file_id
+        document_url: uploadResponse.file_id,
+        extract_tables: true,      // Enable table extraction
+        extract_charts: true,      // Enable chart extraction
+        extract_images: true,      // Enable image description
+        table_format: 'markdown',  // Get tables in markdown format
+        chart_analysis: true       // Get detailed chart analysis
       });
       
       console.log(`📄 Reducto parsing completed`);
       
-      // Extract page-by-page content from Reducto's structured output
-      pageData = extractPagesFromReductoResult(parseResponse);
+      // Extract page-by-page content and visual elements from Reducto's structured output
+      const extractionResult = extractContentFromReductoResult(parseResponse);
+      pageData = extractionResult.pages;
+      const visualElements = extractionResult.visualElements;
       parseMethod = 'reducto';
       console.log(`✅ Successfully extracted ${pageData.length} pages from PDF using Reducto`);
       
@@ -114,20 +121,37 @@ END OF EXTRACTED TEXT
         [documentId, filename, filePath, fullText]
       );
       
-      // Prepare all chunks first
+      // Prepare all chunks first (text + visual)
       const allChunks = [];
       let globalChunkIndex = 0;
       
+      // Add visual content chunks first (if available)
+      if (visualElements && (visualElements.tables.length > 0 || visualElements.charts.length > 0 || visualElements.images.length > 0)) {
+        const visualChunks = createVisualChunks(visualElements);
+        console.log(`🎯 Created ${visualChunks.length} visual content chunks (${visualElements.tables.length} tables, ${visualElements.charts.length} charts, ${visualElements.images.length} images)`);
+        
+        for (const chunk of visualChunks) {
+          allChunks.push({
+            ...chunk,
+            globalIndex: globalChunkIndex,
+            isVisualContent: true
+          });
+          globalChunkIndex++;
+        }
+      }
+      
+      // Add text chunks
       for (let i = 0; i < pageData.length; i++) {
         const page = pageData[i];
         const pageChunks = chunkPageContent(page.content, page.pageNumber);
-        console.log(`📄 Page ${page.pageNumber}: ${page.content.length} chars → ${pageChunks.length} chunks`);
+        console.log(`📄 Page ${page.pageNumber}: ${page.content.length} chars → ${pageChunks.length} text chunks`);
         
         for (const chunk of pageChunks) {
           allChunks.push({
             ...chunk,
             globalIndex: globalChunkIndex,
-            totalChunksInPage: pageChunks.length
+            totalChunksInPage: pageChunks.length,
+            isVisualContent: false
           });
           globalChunkIndex++;
         }
@@ -196,9 +220,12 @@ END OF EXTRACTED TEXT
             JSON.stringify(chunkWithEmbedding.embedding),
             JSON.stringify({
               pageNumber: chunkWithEmbedding.pageNumber,
-              pageType: 'chunk',
+              pageType: chunkWithEmbedding.type || 'chunk',
               chunkIndex: chunkWithEmbedding.chunkIndex,
-              totalChunksInPage: chunkWithEmbedding.totalChunksInPage
+              totalChunksInPage: chunkWithEmbedding.totalChunksInPage,
+              isVisualContent: chunkWithEmbedding.isVisualContent || false,
+              elementId: chunkWithEmbedding.elementId,
+              ...chunkWithEmbedding.metadata
             })
           );
           
@@ -238,6 +265,98 @@ END OF EXTRACTED TEXT
     console.error('PDF processing error:', error);
     throw new Error(`Failed to process PDF: ${error.message}`);
   }
+};
+
+// Create specialized chunks for visual elements
+const createVisualChunks = (visualElements) => {
+  const chunks = [];
+  
+  // Process tables
+  visualElements.tables.forEach((table, index) => {
+    const tableText = `TABLE ${index + 1} (Page ${table.page}): ${table.title}
+${table.description}
+
+Content:
+${table.content}
+
+This table has ${table.rows} rows and ${table.columns} columns.
+Location: Page ${table.page}`;
+
+    chunks.push({
+      text: tableText,
+      type: 'table',
+      pageNumber: table.page,
+      chunkIndex: index,
+      elementId: table.id,
+      metadata: {
+        elementType: 'table',
+        tableIndex: index,
+        title: table.title,
+        rows: table.rows,
+        columns: table.columns,
+        ...table.metadata
+      }
+    });
+  });
+  
+  // Process charts
+  visualElements.charts.forEach((chart, index) => {
+    let chartText = `CHART ${index + 1} (Page ${chart.page}): ${chart.title}
+${chart.description}
+Chart Type: ${chart.type}
+
+`;
+    
+    // Add data if available
+    if (chart.data) {
+      if (typeof chart.data === 'string') {
+        chartText += `Data: ${chart.data}\n`;
+      } else if (typeof chart.data === 'object') {
+        chartText += `Data: ${JSON.stringify(chart.data, null, 2)}\n`;
+      }
+    }
+    
+    chartText += `Location: Page ${chart.page}`;
+
+    chunks.push({
+      text: chartText,
+      type: 'chart',
+      pageNumber: chart.page,
+      chunkIndex: index,
+      elementId: chart.id,
+      metadata: {
+        elementType: 'chart',
+        chartType: chart.type,
+        chartIndex: index,
+        title: chart.title,
+        ...chart.metadata
+      }
+    });
+  });
+  
+  // Process images
+  visualElements.images.forEach((image, index) => {
+    const imageText = `IMAGE ${index + 1} (Page ${image.page}): ${image.title}
+${image.description}
+
+Location: Page ${image.page}`;
+
+    chunks.push({
+      text: imageText,
+      type: 'image',
+      pageNumber: image.page,
+      chunkIndex: index,
+      elementId: image.id,
+      metadata: {
+        elementType: 'image',
+        imageIndex: index,
+        title: image.title,
+        ...image.metadata
+      }
+    });
+  });
+  
+  return chunks;
 };
 
 // Chunk a single page's content into optimal sized pieces
@@ -300,30 +419,6 @@ const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap 
   return chunks;
 };
 
-const chunkText = (text, maxChunkSize = 1000, overlap = 200) => {
-  const chunks = [];
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  
-  let currentChunk = '';
-  
-  for (const sentence of sentences) {
-    if (currentChunk.length + sentence.length > maxChunkSize && currentChunk.length > 0) {
-      chunks.push(currentChunk.trim());
-      
-      const words = currentChunk.split(' ');
-      const overlapWords = words.slice(-Math.floor(overlap / 10));
-      currentChunk = overlapWords.join(' ') + ' ' + sentence;
-    } else {
-      currentChunk += sentence + '. ';
-    }
-  }
-  
-  if (currentChunk.trim().length > 0) {
-    chunks.push(currentChunk.trim());
-  }
-  
-  return chunks;
-};
 
 const extractBasicPdfText = async (dataBuffer) => {
   // Convert buffer to string for text extraction
@@ -515,6 +610,88 @@ const extractPagesFromReductoResult = (result) => {
       pageNumber: 1,
       content: 'Unable to extract text from PDF'
     }];
+  }
+};
+
+// Enhanced extraction that handles both text and visual content
+const extractContentFromReductoResult = (result) => {
+  try {
+    const visualElements = {
+      tables: [],
+      charts: [],
+      images: []
+    };
+    
+    // Extract visual elements from Reducto result
+    if (result.result) {
+      // Extract tables
+      if (result.result.tables && Array.isArray(result.result.tables)) {
+        visualElements.tables = result.result.tables.map((table, index) => ({
+          id: `table_${index}`,
+          content: table.markdown || table.html || table.text || '',
+          page: table.page || 1,
+          title: table.title || `Table ${index + 1}`,
+          description: `Table showing ${table.title || 'financial data'}`,
+          rows: table.rows || 0,
+          columns: table.columns || 0,
+          metadata: {
+            bbox: table.bbox,
+            confidence: table.confidence
+          }
+        }));
+        console.log(`📊 Extracted ${visualElements.tables.length} tables`);
+      }
+      
+      // Extract charts/graphs
+      if (result.result.charts && Array.isArray(result.result.charts)) {
+        visualElements.charts = result.result.charts.map((chart, index) => ({
+          id: `chart_${index}`,
+          description: chart.description || chart.alt_text || `Chart ${index + 1}`,
+          data: chart.extracted_data || chart.data || null,
+          page: chart.page || 1,
+          type: chart.chart_type || chart.type || 'unknown',
+          title: chart.title || `Chart ${index + 1}`,
+          metadata: {
+            bbox: chart.bbox,
+            confidence: chart.confidence,
+            series: chart.series || []
+          }
+        }));
+        console.log(`📈 Extracted ${visualElements.charts.length} charts`);
+      }
+      
+      // Extract images with descriptions
+      if (result.result.images && Array.isArray(result.result.images)) {
+        visualElements.images = result.result.images.map((image, index) => ({
+          id: `image_${index}`,
+          description: image.description || image.alt_text || `Image ${index + 1}`,
+          page: image.page || 1,
+          title: image.title || `Image ${index + 1}`,
+          metadata: {
+            bbox: image.bbox,
+            confidence: image.confidence,
+            url: image.url
+          }
+        }));
+        console.log(`🖼️ Extracted ${visualElements.images.length} images`);
+      }
+    }
+    
+    // Extract pages using existing logic but return both
+    const pages = extractPagesFromReductoResult(result);
+    
+    return {
+      pages,
+      visualElements
+    };
+    
+  } catch (error) {
+    console.warn('Error extracting visual content from Reducto result:', error);
+    // Fallback to text-only extraction
+    return {
+      pages: extractPagesFromReductoResult(result),
+      visualElements: { tables: [], charts: [], images: [] }
+    };
   }
 };
 
