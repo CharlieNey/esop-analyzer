@@ -3,7 +3,6 @@ import { processPDF } from './pdfService.js';
 import { extractMetrics } from './openaiService.js';
 import { extractComprehensiveMetrics } from './comprehensiveExtraction.js';
 import { enhancedAIValidation } from './enhancedAIValidation.js';
-import { runAutoAIValidationAndUpdate } from '../routes/metrics.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class JobService {
@@ -67,11 +66,7 @@ class JobService {
           let finalMetrics = null;
           
           try {
-            // First try enhanced AI validation
-            await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation with cross-validation...');
-            const enhancedResult = await enhancedAIValidation.runEnhancedValidation(document.rows[0].content_text);
-            
-            // Always start with standard AI extraction as the base
+            // Step 1: Start with standard AI extraction as the base
             console.log('🔍 Step 1: Running standard AI extraction as base...');
             await this.updateJobStatus(jobId, 'processing', 'Running standard AI extraction...');
             const aiMetrics = await extractMetrics(document.rows[0].content_text);
@@ -96,20 +91,27 @@ class JobService {
               }
             }
 
-            // Now try enhanced AI validation to AUGMENT the base metrics
-            console.log('🚀 Step 2: Running enhanced AI validation to augment base metrics...');
-            await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation to improve metrics...');
+            // Step 2: Use enhanced AI validation to fill gaps and validate
+            console.log('🚀 Step 2: Using enhanced AI validation to fill gaps...');
+            await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation to fill missing metrics...');
             
-            if (enhancedResult && enhancedResult.metrics && this.hasValidEnhancedMetrics(enhancedResult.metrics)) {
-              console.log('✅ Enhanced AI validation successful');
-              console.log(`🎯 Confidence score: ${enhancedResult.confidence}%`);
+            try {
+              const enhancedResult = await enhancedAIValidation.runEnhancedValidation(document.rows[0].content_text);
               
-              // MERGE enhanced metrics with base metrics (enhanced only replaces NULL values)
-              const enhancedStandard = this.convertEnhancedMetricsToStandard(enhancedResult.metrics);
-              finalMetrics = this.mergeMetricsIntelligently(baseMetrics, enhancedStandard);
-              console.log('🔄 Merged enhanced validation with base metrics');
-            } else {
-              console.log('⚠️ Enhanced AI validation incomplete, using base metrics');
+              if (enhancedResult && enhancedResult.metrics && this.hasValidEnhancedMetrics(enhancedResult.metrics)) {
+                console.log('✅ Enhanced AI validation successful');
+                console.log(`🎯 Confidence score: ${enhancedResult.confidence}%`);
+                
+                // MERGE enhanced metrics with base metrics (enhanced only replaces NULL values)
+                const enhancedStandard = this.convertEnhancedMetricsToStandard(enhancedResult.metrics);
+                finalMetrics = this.mergeMetricsIntelligently(baseMetrics, enhancedStandard);
+                console.log('🔄 Merged enhanced validation with base metrics');
+              } else {
+                console.log('⚠️ Enhanced AI validation incomplete, using base metrics');
+                finalMetrics = baseMetrics;
+              }
+            } catch (enhancedError) {
+              console.warn('Enhanced AI validation failed, continuing with base metrics:', enhancedError.message);
               finalMetrics = baseMetrics;
             }
             
@@ -140,16 +142,9 @@ class JobService {
         client.release();
       }
 
-      // Run automatic AI validation and update metrics if better values are found
-      await this.updateJobStatus(jobId, 'processing', 'Running AI validation and auto-updating metrics...');
-      
-      try {
-        await runAutoAIValidationAndUpdate(pdfResult.documentId);
-        console.log(`🤖 Automatic AI validation completed for document ${pdfResult.documentId}`);
-      } catch (aiValidationError) {
-        console.warn('Auto AI validation failed, but continuing:', aiValidationError.message);
-        // Don't fail the entire job if AI validation fails
-      }
+      // Skip automatic AI validation since we already did comprehensive extraction and enhanced validation
+      console.log(`📊 Metrics extraction completed for document ${pdfResult.documentId}`);
+      console.log('ℹ️ Skipping redundant AI validation - already completed comprehensive extraction')
 
       // Complete the job
       await this.updateJobStatus(jobId, 'completed', 'Processing completed successfully!', pdfResult.documentId);
