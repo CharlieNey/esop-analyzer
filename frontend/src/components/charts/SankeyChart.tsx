@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import { sankey, sankeyLinkHorizontal, SankeyGraph, SankeyNode, SankeyLink } from 'd3-sankey';
+import { sankey, sankeyLinkHorizontal, SankeyGraph } from 'd3-sankey';
 
 interface SankeyData {
   nodes: Array<{ name: string; category?: string }>;

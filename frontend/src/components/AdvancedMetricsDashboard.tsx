@@ -127,7 +127,7 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
     if (value === null || value === undefined || value === '') return null;
     
     if (typeof value === 'string') {
-      const cleaned = value.replace(/[\$,\s%]/g, '');
+      const cleaned = value.replace(/[$,\s%]/g, '');
       const parsed = parseFloat(cleaned);
       return isNaN(parsed) || parsed === 0 ? null : parsed;
     }

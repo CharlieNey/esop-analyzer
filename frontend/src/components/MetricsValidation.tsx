@@ -72,25 +72,6 @@ const MetricsValidation: React.FC<MetricsValidationProps> = ({ documentId, metri
     return result;
   };
 
-  const getValidationIcon = (matches: string, confidence: string) => {
-    if (matches.toLowerCase() === 'yes' && confidence.toLowerCase() === 'high') {
-      return <CheckCircle className="h-5 w-5 text-green-600" />;
-    } else if (matches.toLowerCase() === 'no') {
-      return <XCircle className="h-5 w-5 text-red-600" />;
-    } else {
-      return <AlertTriangle className="h-5 w-5 text-yellow-600" />;
-    }
-  };
-
-  const getValidationColor = (matches: string, confidence: string) => {
-    if (matches.toLowerCase() === 'yes' && confidence.toLowerCase() === 'high') {
-      return 'border-green-200 bg-green-50';
-    } else if (matches.toLowerCase() === 'no') {
-      return 'border-red-200 bg-red-50';
-    } else {
-      return 'border-yellow-200 bg-yellow-50';
-    }
-  };
 
   const formatValue = (value: number) => {
     if (value >= 1000000000) {

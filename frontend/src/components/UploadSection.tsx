@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import { uploadPDF, pollJobUntilComplete } from '../services/api';
 
 interface UploadSectionProps {
@@ -11,7 +11,6 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [processingProgress, setProcessingProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
   const [uploadStatus, setUploadStatus] = useState<{
     type: 'success' | 'error' | 'processing' | null;
@@ -56,7 +55,6 @@ const UploadSection: React.FC<UploadSectionProps> = ({ onUploadSuccess }) => {
     setIsUploading(true);
     setIsProcessing(false);
     setUploadProgress(0);
-    setProcessingProgress(0);
     setUploadStatus({ type: null, message: '' });
     setProgressMessage('');
 

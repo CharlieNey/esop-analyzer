@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, BarChart3, Home, Upload, MessageCircle, TrendingUp, CheckCircle, Clock, ChevronDown, Sparkles, Layers } from 'lucide-react';
+import { FileText, BarChart3, Upload, MessageCircle, TrendingUp, CheckCircle, Clock, ChevronDown, Layers } from 'lucide-react';
 import UploadSection from './components/UploadSection';
 import EnhancedMetricsDashboard from './components/EnhancedMetricsDashboard';
 import AdvancedMetricsDashboard from './components/AdvancedMetricsDashboard';
@@ -91,9 +91,6 @@ function App() {
     }, 150);
   };
 
-  const handleAnalysisComplete = () => {
-    setIsAnalysisComplete(true);
-  };
 
   // Auto-set analysis as complete when document is loaded and results are shown
   useEffect(() => {

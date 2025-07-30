@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart } from 'recharts';
-import { DollarSign, TrendingUp, Users, Percent, ZoomIn, BarChart3, PieChart as PieChartIcon, TrendingDown } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
+import { DollarSign, TrendingUp, Users, Percent, ZoomIn, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 import MetricsValidation from './MetricsValidation';
