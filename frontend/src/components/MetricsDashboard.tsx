@@ -37,6 +37,16 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     }
   }, [documentId]);
 
+  // Debug logging
+  console.log('MetricsDashboard state:', {
+    loading,
+    error,
+    hasMetrics: !!metrics,
+    useLiveData,
+    liveDataLoading,
+    documentId
+  });
+
   const toggleLiveData = async () => {
     if (!useLiveData) {
       // Switching to live data
@@ -68,6 +78,19 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">ESOP Valuation Dashboard</h2>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-500">Data Source:</span>
+            <button
+              onClick={toggleLiveData}
+              disabled={true}
+              className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 opacity-50 cursor-not-allowed"
+            >
+              Loading...
+            </button>
+          </div>
+        </div>
         <div className="animate-pulse">
           <div className="h-6 bg-gray-200 rounded mb-4"></div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
