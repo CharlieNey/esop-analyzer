@@ -43,9 +43,6 @@ const GaugeChart: React.FC<GaugeChartProps> = ({
       .domain([min, max])
       .range([-Math.PI * 0.75, Math.PI * 0.75]);
 
-    const colorScale = d3.scaleLinear<string>()
-      .domain(thresholds.map(t => t.value))
-      .range(thresholds.map(t => t.color));
 
     // Create arc generator for gauge background
     const arc = d3.arc()

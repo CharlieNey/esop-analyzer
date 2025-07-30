@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Building, Users, Calculator, BarChart3, Minus, Download } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Building, Users, Calculator, BarChart3, Download } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 import html2canvas from 'html2canvas';
@@ -42,47 +42,6 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
     }
   }, [documentId]);
 
-  const formatCurrency = (value: number | null): string => {
-    if (value === null || value === undefined) return 'N/A';
-    
-    // For very large numbers, use compact notation
-    if (value >= 1000000000) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1,
-        notation: 'compact',
-        compactDisplay: 'short'
-      }).format(value);
-    } else if (value >= 1000000) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1,
-        notation: 'compact',
-        compactDisplay: 'short'
-      }).format(value);
-    } else {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(value);
-    }
-  };
-
-  const formatPercentage = (value: number | null): string => {
-    if (value === null || value === undefined) return 'N/A';
-    return `${value.toFixed(2)}%`;
-  };
-
-  const calculatePercentageChange = (current: number | null, previous: number | null): number | null => {
-    if (!current || !previous || previous === 0) return null;
-    return ((current - previous) / previous) * 100;
-  };
 
   // Download handler
   const handleDownload = async () => {
@@ -146,7 +105,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
     // Handle string values
     if (typeof value === 'string') {
       // Remove common formatting characters
-      const cleaned = value.replace(/[\$,\s%]/g, '');
+      const cleaned = value.replace(/[$,\s%]/g, '');
       const parsed = parseFloat(cleaned);
       return isNaN(parsed) || parsed === 0 ? null : parsed;
     }
