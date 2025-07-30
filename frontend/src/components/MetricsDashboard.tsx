@@ -3,7 +3,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { DollarSign, TrendingUp, Users, Percent, ZoomIn, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
-import MetricsValidation from './MetricsValidation';
 
 interface MetricsDashboardProps {
   documentId: string;
@@ -291,47 +290,11 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     ];
   };
 
-  // Prepare metrics for validation
-  const validationMetrics = {
-    enterpriseValue: getBestValue(
-      companyVal?.totalValue,
-      companyVal?.value,
-      companyVal?.companyValue
-    ),
-    valueOfEquity: getBestValue(
-      companyVal?.totalValue,
-      companyVal?.value,
-      companyVal?.companyValue
-    ),
-    valuationPerShare: getBestValue(
-      companyVal?.perShareValue,
-      companyVal?.sharePrice,
-      companyVal?.pricePerShare
-    ),
-    revenue: getBestValue(
-      keyFinancials?.revenue,
-      keyFinancials?.totalRevenue,
-      keyFinancials?.annualRevenue
-    ),
-    ebitda: getBestValue(
-      keyFinancials?.ebitda,
-      keyFinancials?.EBITDA,
-      keyFinancials?.adjustedEbitda
-    ),
-    discountRate: getBestValue(
-      discountRates?.discountRate,
-      discountRates?.wacc,
-      keyFinancials?.discountRate
-    ),
-  };
+
 
   return (
     <div className="space-y-6">
-      {/* AI Validation Section */}
-      <MetricsValidation 
-        documentId={documentId} 
-        metrics={validationMetrics}
-      />
+
       
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-6">

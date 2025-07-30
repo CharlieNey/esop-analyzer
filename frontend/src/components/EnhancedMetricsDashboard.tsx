@@ -4,7 +4,6 @@ import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import MetricsValidation from './MetricsValidation';
 
 interface EnhancedMetricsDashboardProps {
   documentId: string;
@@ -304,15 +303,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
     }
   ];
 
-  // Prepare metrics for validation
-  const validationMetrics = {
-    enterpriseValue: metricCards[0].currentValue,
-    valueOfEquity: metricCards[1].currentValue,
-    valuationPerShare: metricCards[2].currentValue,
-    revenue: metricCards[3].currentValue,
-    ebitda: metricCards[4].currentValue,
-    discountRate: metricCards[5].currentValue,
-  };
+
 
   return (
     <div className="space-y-6">
@@ -340,13 +331,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
           </button>
         </div>
 
-        {/* AI Validation Section - Validates the dashboard metrics */}
-        <div className="mb-6">
-          <MetricsValidation 
-            documentId={documentId} 
-            metrics={validationMetrics}
-          />
-        </div>
+
 
       {/* Dashboard content to capture */}
       <div id="dashboard-capture">
