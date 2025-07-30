@@ -433,27 +433,38 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
   const ebitdaTrendData = trendData ? trendData.filter((item: any) => item.ebitda !== undefined) : null;
   const perShareTrendData = trendData ? trendData.filter((item: any) => item.perShareValue !== undefined) : null;
 
-  // Chart availability logic - show all charts but mark some as disabled
-  const chartOptions = [
+  // Chart availability logic - only show charts that have actual data
+  const allChartOptions = [
     { 
       id: 'revenue', 
       name: 'Revenue Trends', 
       icon: TrendingUp, 
-      available: (revenueTrendData !== null && revenueTrendData.length > 0) || !loadingEnhanced // Show if we have data or haven't tried enhanced yet
+      hasData: revenueTrendData !== null && revenueTrendData.length > 0,
+      isLoading: loadingEnhanced || loadingFallback
     },
     { 
       id: 'ebitda', 
       name: 'EBITDA Trends', 
       icon: TrendingUp, 
-      available: (ebitdaTrendData !== null && ebitdaTrendData.length > 0) || !loadingEnhanced // Show if we have data or haven't tried enhanced yet
+      hasData: ebitdaTrendData !== null && ebitdaTrendData.length > 0,
+      isLoading: loadingEnhanced || loadingFallback
     },
     { 
       id: 'pershare', 
       name: 'Per-Share Value', 
       icon: TrendingUp, 
-      available: (perShareTrendData !== null && perShareTrendData.length > 0) || !loadingEnhanced // Show if we have data or haven't tried enhanced yet
+      hasData: perShareTrendData !== null && perShareTrendData.length > 0,
+      isLoading: loadingEnhanced || loadingFallback
     }
   ];
+
+  // Only include charts that have data OR are currently loading (to show loading state)  
+  const chartOptions = allChartOptions.filter(option => option.hasData || option.isLoading).map(option => ({
+    id: option.id,
+    name: option.name,
+    icon: option.icon,
+    available: option.hasData // Only mark as available if there's actual data
+  }));
   
   console.log('📊 Chart options available:', chartOptions.map(opt => opt.id));
   console.log('💹 Per-share trend data:', perShareTrendData);
@@ -493,12 +504,25 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
     const availableCharts = chartOptions.filter(option => option.available);
     
     if (availableCharts.length === 0) {
+      // Show different message if we're still loading vs no data found
+      const isStillLoading = loadingEnhanced || loadingFallback;
+      
       return (
         <div className="bg-gray-50 rounded-lg p-8 text-center min-h-[400px] flex items-center justify-center">
           <div>
-            <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Insufficient Data for Charts</h3>
-            <p className="text-gray-600">More financial data is needed to generate meaningful visualizations.</p>
+            {isStillLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Analyzing Historical Data</h3>
+                <p className="text-gray-600">AI is extracting historical financial trends from your document...</p>
+              </>
+            ) : (
+              <>
+                <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Historical Data Found</h3>
+                <p className="text-gray-600">This document doesn't contain sufficient historical financial data for trend analysis.</p>
+              </>
+            )}
           </div>
         </div>
       );
@@ -700,43 +724,32 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
           </button>
         </div>
 
-        {/* Loading indicator for enhanced metrics */}
-        {(loadingEnhanced || loadingFallback) && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-              <span className="text-sm text-blue-700">
-                {loadingEnhanced ? 'Analyzing historical data for trend charts...' : 'Using AI to extract historical financial data...'}
-              </span>
-            </div>
-          </div>
-        )}
 
-        {/* Chart Navigation - Show all charts with disabled states */}
+        {/* Chart Navigation - Only show charts with data */}
         {chartOptions.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-4">
             {chartOptions.map((option) => {
               const Icon = option.icon;
-              const isDisabled = !option.available;
               const isActive = effectiveActiveChart === option.id;
+              const isLoading = (loadingEnhanced || loadingFallback) && !option.available;
               
               return (
                 <button
                   key={option.id}
                   onClick={() => handleChartSelection(option.id)}
-                  disabled={isDisabled}
+                  disabled={!option.available && !isLoading}
                   className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
-                    isDisabled
+                    !option.available && !isLoading
                       ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
                       : isActive
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
-                  title={isDisabled ? `No data available for ${option.name}` : option.name}
+                  title={option.name}
                 >
-                  <Icon className={`h-4 w-4 ${isDisabled ? 'opacity-50' : ''}`} />
+                  <Icon className={`h-4 w-4 ${!option.available && !isLoading ? 'opacity-50' : ''}`} />
                   <span className="text-sm font-medium">{option.name}</span>
-                  {(['revenue', 'ebitda', 'pershare'].includes(option.id)) && (loadingEnhanced || loadingFallback) && !isDisabled && (
+                  {isLoading && (
                     <div className="animate-spin rounded-full h-3 w-3 border border-gray-400 border-t-transparent"></div>
                   )}
                 </button>
