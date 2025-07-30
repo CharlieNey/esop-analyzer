@@ -66,6 +66,151 @@ router.get('/:documentId', async (req, res) => {
   }
 });
 
+router.get('/live/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    
+    const client = await pool.connect();
+    try {
+      // Get document content for real-time analysis
+      const documentResult = await client.query(
+        'SELECT content_text, filename FROM documents WHERE id = $1',
+        [documentId]
+      );
+      
+      if (documentResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+      
+      const documentText = documentResult.rows[0].content_text;
+      const filename = documentResult.rows[0].filename;
+      
+      // Define key metrics questions that mirror dashboard display
+      const metricQuestions = [
+        {
+          key: 'companyValue',
+          question: 'What is the total company valuation or enterprise value mentioned in this document? Provide only the numeric value with no formatting.',
+          category: 'companyValuation'
+        },
+        {
+          key: 'perShareValue', 
+          question: 'What is the fair market value per share or price per share mentioned in this document? Provide only the numeric value.',
+          category: 'companyValuation'
+        },
+        {
+          key: 'esopPercentage',
+          question: 'What percentage of the company is owned by the ESOP or employees? Provide only the numeric percentage value.',
+          category: 'capitalStructure'
+        },
+        {
+          key: 'discountRate',
+          question: 'What is the discount rate or WACC (weighted average cost of capital) mentioned in this document? Provide only the numeric percentage value.',
+          category: 'discountRates'
+        },
+        {
+          key: 'revenue',
+          question: 'What is the annual revenue of the company mentioned in this document? Provide only the numeric value.',
+          category: 'keyFinancials'
+        },
+        {
+          key: 'ebitda',
+          question: 'What is the EBITDA (earnings before interest, taxes, depreciation, and amortization) mentioned in this document? Provide only the numeric value.',
+          category: 'keyFinancials'
+        }
+      ];
+      
+      // Get live answers for each metric
+      const liveMetrics = {};
+      const errors = [];
+      
+      for (const metric of metricQuestions) {
+        try {
+          console.log(`🔍 Getting live ${metric.key} for document ${documentId}`);
+          const answer = await answerQuestion(metric.question, documentText);
+          
+          // Parse the numeric value from the answer
+          const numericValue = parseNumericAnswer(answer);
+          
+          if (!liveMetrics[metric.category]) {
+            liveMetrics[metric.category] = { data: {} };
+          }
+          
+          liveMetrics[metric.category].data[metric.key] = numericValue;
+          
+          console.log(`✅ ${metric.key}: ${numericValue} (from: "${answer?.substring(0, 100)}...")`);
+          
+        } catch (error) {
+          console.error(`❌ Error getting live ${metric.key}:`, error.message);
+          errors.push({ metric: metric.key, error: error.message });
+        }
+      }
+      
+      res.json({
+        documentId,
+        filename,
+        type: 'live',
+        metrics: liveMetrics,
+        extractedAt: new Date().toISOString(),
+        errors: errors.length > 0 ? errors : undefined
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Get live metrics error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to parse numeric answers from AI responses
+const parseNumericAnswer = (answer) => {
+  if (!answer || typeof answer !== 'string') return null;
+  
+  // Clean the answer and extract numbers
+  const cleaned = answer.trim().toLowerCase();
+  
+  // Handle negative responses
+  if (cleaned.includes('not found') || cleaned.includes('not mentioned') || 
+      cleaned.includes('unclear') || cleaned.includes('not specified')) {
+    return null;
+  }
+  
+  // Extract numeric patterns
+  const patterns = [
+    // Currency with units (e.g., "$5.2 million", "$1.5B")
+    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|m|billion|b)\b/gi,
+    // Numbers with units (e.g., "5.2 million", "1.5 billion")
+    /([\d,]+(?:\.\d+)?)\s*(?:million|m|billion|b)\b/gi,
+    // Percentages (e.g., "15%", "15 percent")
+    /([\d,]+(?:\.\d+)?)(?:%|\s*percent)/gi,
+    // Currency without units (e.g., "$50,000")
+    /\$\s*([\d,]+(?:\.\d+)?)/g,
+    // Plain numbers (e.g., "50000", "50,000")
+    /\b([\d,]+(?:\.\d+)?)\b/g
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = [...cleaned.matchAll(pattern)];
+    if (matches.length > 0) {
+      let value = parseFloat(matches[0][1].replace(/,/g, ''));
+      const fullMatch = matches[0][0].toLowerCase();
+      
+      // Apply multipliers
+      if (fullMatch.includes('million') || fullMatch.includes(' m')) {
+        value *= 1000000;
+      } else if (fullMatch.includes('billion') || fullMatch.includes(' b')) {
+        value *= 1000000000;
+      }
+      
+      return !isNaN(value) ? value : null;
+    }
+  }
+  
+  return null;
+};
+
 router.get('/summary/:documentId', async (req, res) => {
   try {
     const { documentId } = req.params;
