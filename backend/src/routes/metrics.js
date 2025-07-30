@@ -459,4 +459,297 @@ router.get('/ai/:documentId', async (req, res) => {
   }
 });
 
+// Function to automatically run AI validation and update metrics if better values are found
+export const runAutoAIValidationAndUpdate = async (documentId) => {
+  try {
+    const client = await pool.connect();
+    try {
+      // Get current extracted metrics
+      const metricsResult = await client.query(
+        'SELECT metric_type, metric_data, confidence_score FROM extracted_metrics WHERE document_id = $1',
+        [documentId]
+      );
+      
+      // Get document content for AI validation
+      const documentResult = await client.query(
+        'SELECT content_text FROM documents WHERE id = $1',
+        [documentId]
+      );
+      
+      if (documentResult.rows.length === 0) {
+        console.log('Document not found for auto AI validation:', documentId);
+        return;
+      }
+      
+      const documentText = documentResult.rows[0].content_text;
+      const currentMetrics = {};
+      
+      // Build current metrics object based on actual database structure
+      metricsResult.rows.forEach(row => {
+        try {
+          const data = row.metric_data;
+          
+          if (row.metric_type === 'companyValuation' && data) {
+            if (data.totalValue) currentMetrics.enterpriseValue = data.totalValue;
+            if (data.perShareValue) currentMetrics.valuationPerShare = data.perShareValue;
+          } else if (row.metric_type === 'valueOfEquity' && data) {
+            if (data.currentValue) currentMetrics.valueOfEquity = data.currentValue;
+          } else if (row.metric_type === 'enterpriseValue' && data) {
+            if (data.currentValue) currentMetrics.enterpriseValue = data.currentValue;
+          } else if (row.metric_type === 'valuationPerShare' && data) {
+            if (data.currentValue) currentMetrics.valuationPerShare = data.currentValue;
+          } else if (row.metric_type === 'keyFinancials' && data) {
+            if (data.revenue) currentMetrics.revenue = data.revenue;
+            if (data.ebitda) currentMetrics.ebitda = data.ebitda;
+          } else if (row.metric_type === 'discountRates' && data) {
+            if (data.discountRate) currentMetrics.discountRate = data.discountRate;
+          }
+        } catch (e) {
+          console.log('Error parsing metric data:', e.message);
+        }
+      });
+      
+      console.log('🤖 Running automatic AI validation for document:', documentId);
+      console.log('Current metrics:', currentMetrics);
+      
+      // Define validation queries - using same format as manual validation for consistency
+      const validationQueries = [
+        {
+          key: 'enterpriseValue',
+          question: `What is the total enterprise value or company valuation mentioned in this document? Please provide the exact number with units (millions/billions).`,
+          currentValue: currentMetrics.enterpriseValue
+        },
+        {
+          key: 'valueOfEquity',
+          question: `What is the total value of equity mentioned in this document? Please provide the exact number with units.`,
+          currentValue: currentMetrics.valueOfEquity
+        },
+        {
+          key: 'valuationPerShare',
+          question: `What is the fair market value per share or price per share mentioned in this document? Please provide the exact number.`,
+          currentValue: currentMetrics.valuationPerShare
+        },
+        {
+          key: 'revenue',
+          question: `What is the company's annual revenue mentioned in this document? Please provide the exact number with units.`,
+          currentValue: currentMetrics.revenue
+        },
+        {
+          key: 'ebitda',
+          question: `What is the company's EBITDA mentioned in this document? Please provide the exact number with units.`,
+          currentValue: currentMetrics.ebitda
+        },
+        {
+          key: 'discountRate',
+          question: `What is the discount rate or weighted average cost of capital (WACC) mentioned in this document? Please provide the exact percentage.`,
+          currentValue: currentMetrics.discountRate
+        }
+      ];
+      
+      const updates = [];
+      
+      // Process each validation query - check ALL metrics, not just existing ones
+      for (const query of validationQueries) {
+        // Always run validation, even for missing/null values
+        try {
+          console.log(`🔍 Auto-validating ${query.key}: ${query.currentValue || 'NULL/MISSING'}`);
+            
+            const validationPrompt = `${query.question}
+            
+Current extracted value: ${query.currentValue || 'None found'}
+
+Please respond in this exact format:
+EXTRACTED_VALUE: [the exact value you find in the document, or "NOT_FOUND" if not mentioned]
+CONFIDENCE: [High/Medium/Low]
+MATCHES_CURRENT: [Yes/No/N/A if no current value]
+EXPLANATION: [brief explanation of what you found and why it matches or doesn't match]`;
+
+            const aiResponse = await answerQuestion(validationPrompt, documentText);
+            
+            // Parse AI response to check if we found a conflicting value
+            const lines = aiResponse.split('\n');
+            let extractedValue = null;
+            let matches = 'Unknown';
+            let confidence = 'Unknown';
+            
+            for (const line of lines) {
+              if (line.startsWith('EXTRACTED_VALUE:')) {
+                const rawValue = line.replace('EXTRACTED_VALUE:', '').trim();
+                if (!rawValue.toLowerCase().includes('not_found') && 
+                    !rawValue.toLowerCase().includes('not found') &&
+                    !rawValue.toLowerCase().includes('unknown')) {
+                  // Try to parse the extracted value
+                  const patterns = [
+                    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|m)\b/gi,
+                    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:billion|b)\b/gi,
+                    /([\d,]+(?:\.\d+)?)\s*(?:million|m)\s*(?:dollars?)?/gi,
+                    /([\d,]+(?:\.\d+)?)\s*(?:billion|b)\s*(?:dollars?)?/gi,
+                    /\$\s*([\d,]+(?:\.\d+)?)\b/g,
+                    /([\d,]+(?:\.\d+)?)%/g,
+                    /([\d,]+(?:\.\d+)?)\s*percent/gi,
+                    /\b([\d,]{4,}(?:\.\d+)?)\b/g
+                  ];
+                  
+                  for (const pattern of patterns) {
+                    const matches = [...rawValue.matchAll(pattern)];
+                    for (const match of matches) {
+                      let value = parseFloat(match[1].replace(/,/g, ''));
+                      const fullMatch = match[0].toLowerCase();
+                      
+                      if (fullMatch.includes('million') || fullMatch.endsWith(' m') || fullMatch.includes(' m ')) {
+                        value *= 1000000;
+                      } else if (fullMatch.includes('billion') || fullMatch.endsWith(' b') || fullMatch.includes(' b ')) {
+                        value *= 1000000000;
+                      }
+                      
+                      if (!isNaN(value) && value > 0) {
+                        extractedValue = value;
+                        break;
+                      }
+                    }
+                    if (extractedValue !== null) break;
+                  }
+                }
+              } else if (line.startsWith('MATCHES_CURRENT:')) {
+                matches = line.replace('MATCHES_CURRENT:', '').trim();
+              } else if (line.startsWith('CONFIDENCE:')) {
+                confidence = line.replace('CONFIDENCE:', '').trim();
+              }
+            }
+            
+            // Update if: AI found a value AND (no current value OR doesn't match current) AND good confidence
+            const shouldUpdate = extractedValue !== null && 
+                (confidence.toLowerCase() === 'high' || confidence.toLowerCase() === 'medium') &&
+                (query.currentValue === null || 
+                 query.currentValue === undefined || 
+                 matches.toLowerCase() === 'no' ||
+                 matches.toLowerCase() === 'n/a');
+                 
+            if (shouldUpdate) {
+              
+              console.log(`✨ Found better AI value for ${query.key}: ${extractedValue} (current: ${query.currentValue})`);
+              
+              // Map validation key back to metric type and data structure
+              const metricTypeMap = {
+                'enterpriseValue': ['companyValuation', 'enterpriseValue'],
+                'valueOfEquity': ['valueOfEquity'],
+                'valuationPerShare': ['companyValuation', 'valuationPerShare'],
+                'revenue': ['keyFinancials'],
+                'ebitda': ['keyFinancials'],
+                'discountRate': ['discountRates']
+              };
+              
+              const metricTypes = metricTypeMap[query.key];
+              if (metricTypes) {
+                metricTypes.forEach(metricType => {
+                  updates.push({
+                    metricType,
+                    key: query.key,
+                    value: extractedValue,
+                    confidence: confidence.toLowerCase() === 'high' ? 0.9 : 0.7
+                  });
+                });
+              }
+            }
+            
+          } catch (error) {
+            console.error(`Error in auto-validation for ${query.key}:`, error);
+          }
+      }
+      
+      // Apply updates to database
+      if (updates.length > 0) {
+        console.log(`🔄 Applying ${updates.length} AI-improved values to database`);
+        
+        for (const update of updates) {
+          try {
+            // Get current metric data
+            const currentResult = await client.query(
+              'SELECT metric_data FROM extracted_metrics WHERE document_id = $1 AND metric_type = $2',
+              [documentId, update.metricType]
+            );
+            
+            let updatedData = {};
+            let isNewRecord = false;
+            
+            if (currentResult.rows.length > 0) {
+              updatedData = { ...currentResult.rows[0].metric_data };
+            } else {
+              // Create new record structure with defaults
+              isNewRecord = true;
+              console.log(`📝 Creating new metric record for ${update.metricType}`);
+              
+              // Initialize with appropriate default structure
+              if (update.metricType === 'companyValuation') {
+                updatedData = { currency: 'USD', totalValue: null, perShareValue: null };
+              } else if (update.metricType === 'enterpriseValue') {
+                updatedData = { currency: 'USD', currentValue: null, previousValue: null };
+              } else if (update.metricType === 'valueOfEquity') {
+                updatedData = { currency: 'USD', currentValue: null, previousValue: null };
+              } else if (update.metricType === 'valuationPerShare') {
+                updatedData = { currency: 'USD', currentValue: null, previousValue: null };
+              } else if (update.metricType === 'keyFinancials') {
+                updatedData = { revenue: null, ebitda: null, weightedAverageCostOfCapital: null };
+              } else if (update.metricType === 'discountRates') {
+                updatedData = { discountRate: null, riskFreeRate: null, marketRiskPremium: null };
+              }
+            }
+              
+              // Update the specific field based on actual database structure
+              if (update.metricType === 'companyValuation') {
+                if (update.key === 'enterpriseValue') {
+                  updatedData.totalValue = update.value;
+                } else if (update.key === 'valuationPerShare') {
+                  updatedData.perShareValue = update.value;
+                }
+              } else if (update.metricType === 'enterpriseValue') {
+                updatedData.currentValue = update.value;
+              } else if (update.metricType === 'valueOfEquity') {
+                updatedData.currentValue = update.value;
+              } else if (update.metricType === 'valuationPerShare') {
+                updatedData.currentValue = update.value;
+              } else if (update.metricType === 'keyFinancials') {
+                if (update.key === 'revenue') {
+                  updatedData.revenue = update.value;
+                } else if (update.key === 'ebitda') {
+                  updatedData.ebitda = update.value;
+                }
+              } else if (update.metricType === 'discountRates') {
+                updatedData.discountRate = update.value;
+              }
+              
+              // Update or insert the record
+              if (isNewRecord) {
+                await client.query(
+                  'INSERT INTO extracted_metrics (document_id, metric_type, metric_data, confidence_score, extracted_at) VALUES ($1, $2, $3, $4, NOW())',
+                  [documentId, update.metricType, JSON.stringify(updatedData), update.confidence]
+                );
+                console.log(`✅ Created ${update.metricType}.${update.key} with value ${update.value}`);
+              } else {
+                await client.query(
+                  'UPDATE extracted_metrics SET metric_data = $1, confidence_score = $2, extracted_at = NOW() WHERE document_id = $3 AND metric_type = $4',
+                  [JSON.stringify(updatedData), update.confidence, documentId, update.metricType]
+                );
+                console.log(`✅ Updated ${update.metricType}.${update.key} to ${update.value}`);
+              }
+              
+          } catch (updateError) {
+            console.error(`Error updating ${update.metricType}.${update.key}:`, updateError);
+          }
+        }
+        
+        console.log(`🎉 Successfully auto-updated ${updates.length} metrics with AI-improved values`);
+      } else {
+        console.log('✅ No better AI values found, keeping current metrics');
+      }
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Auto AI validation error:', error);
+  }
+};
+
 export default router;

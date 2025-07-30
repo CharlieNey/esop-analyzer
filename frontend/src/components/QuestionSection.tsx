@@ -24,29 +24,36 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
     setResponses([]);
   }, [documentId]);
 
-  // Auto-scroll to top of the newest answer
+  // Auto-scroll to show new content
   useEffect(() => {
-    if (responses.length > 0 && messagesContainerRef.current) {
-      const container = messagesContainerRef.current;
-      
-      // Find all answer elements (gray background)
-      const answerElements = container.querySelectorAll('.bg-gray-50');
-      
-      if (answerElements.length > 0) {
-        // Get the last (newest) answer element
-        const lastAnswerElement = answerElements[answerElements.length - 1] as HTMLElement;
+    if (!messagesContainerRef.current) return;
+    
+    const container = messagesContainerRef.current;
+    
+    if (responses.length > 0) {
+      // When there are responses, scroll to show the latest answer
+      setTimeout(() => {
+        const answerElements = container.querySelectorAll('[data-answer-element]');
         
-        // Scroll to the top of the answer element
-        const scrollTop = lastAnswerElement.offsetTop - container.offsetTop - 20; // 20px padding above
-        
-        container.scrollTo({
-          top: scrollTop,
-          behavior: 'smooth'
-        });
-      }
-    } else if (isLoading && messagesEndRef.current) {
-      // If loading and no messages yet, scroll to bottom
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (answerElements.length > 0) {
+          const lastAnswerElement = answerElements[answerElements.length - 1] as HTMLElement;
+          
+          // Scroll to show the answer with some padding above
+          const containerRect = container.getBoundingClientRect();
+          const elementRect = lastAnswerElement.getBoundingClientRect();
+          const scrollTop = container.scrollTop + elementRect.top - containerRect.top - 20;
+          
+          container.scrollTo({
+            top: scrollTop,
+            behavior: 'smooth'
+          });
+        }
+      }, 100); // Small delay to ensure DOM is updated
+    } else if (isLoading) {
+      // When loading starts, scroll to bottom
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   }, [responses, isLoading]);
 
@@ -121,7 +128,7 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
             
             {/* AI Answer */}
             <div className="flex justify-start">
-              <div className="bg-gray-50 rounded-lg px-4 py-3 max-w-[85%]">
+              <div data-answer-element className="bg-gray-50 rounded-lg px-4 py-3 max-w-[85%]">
                 <div className="prose prose-sm max-w-none">
                   <p 
                     className="text-gray-700 whitespace-pre-wrap leading-relaxed"

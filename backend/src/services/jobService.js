@@ -2,6 +2,7 @@ import { pool } from '../models/database.js';
 import { processPDF } from './pdfService.js';
 import { extractMetrics } from './openaiService.js';
 import { extractComprehensiveMetrics } from './comprehensiveExtraction.js';
+import { runAutoAIValidationAndUpdate } from '../routes/metrics.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class JobService {
@@ -113,6 +114,17 @@ class JobService {
         }
       } finally {
         client.release();
+      }
+
+      // Run automatic AI validation and update metrics if better values are found
+      await this.updateJobStatus(jobId, 'processing', 'Running AI validation and auto-updating metrics...');
+      
+      try {
+        await runAutoAIValidationAndUpdate(pdfResult.documentId);
+        console.log(`🤖 Automatic AI validation completed for document ${pdfResult.documentId}`);
+      } catch (aiValidationError) {
+        console.warn('Auto AI validation failed, but continuing:', aiValidationError.message);
+        // Don't fail the entire job if AI validation fails
       }
 
       // Complete the job
