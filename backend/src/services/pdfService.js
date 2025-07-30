@@ -77,9 +77,10 @@ export const processPDF = async (filePath, filename) => {
       }
     }
     
-    // Generate debug text file with page structure
-    const debugFilePath = `uploads/debug_${filename.replace('.pdf', '')}_${Date.now()}.txt`;
-    const debugContent = `PDF Debug Information
+    // Generate debug text file with page structure (development only)
+    if (process.env.NODE_ENV === 'development') {
+      const debugFilePath = `uploads/debug_${filename.replace('.pdf', '')}_${Date.now()}.txt`;
+      const debugContent = `PDF Debug Information
 ====================
 Filename: ${filename}
 Original file path: ${filePath}
@@ -95,12 +96,13 @@ ${page.content}
 
 END OF EXTRACTED TEXT
 ====================`;
-    
-    try {
-      await fs.writeFile(debugFilePath, debugContent);
-      console.log(`📝 Debug file created: ${debugFilePath}`);
-    } catch (debugError) {
-      console.log('Failed to create debug file:', debugError.message);
+      
+      try {
+        await fs.writeFile(debugFilePath, debugContent);
+        console.log(`📝 Debug file created: ${debugFilePath}`);
+      } catch (debugError) {
+        console.log('Failed to create debug file:', debugError.message);
+      }
     }
     
     const documentId = uuidv4();

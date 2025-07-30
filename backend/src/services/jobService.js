@@ -2,6 +2,7 @@ import { pool } from '../models/database.js';
 import { processPDF } from './pdfService.js';
 import { extractMetrics } from './openaiService.js';
 import { extractComprehensiveMetrics } from './comprehensiveExtraction.js';
+import { enhancedAIValidation } from './enhancedAIValidation.js';
 import { runAutoAIValidationAndUpdate } from '../routes/metrics.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -66,26 +67,37 @@ class JobService {
           let finalMetrics = null;
           
           try {
-            // First try AI extraction
-            await this.updateJobStatus(jobId, 'processing', 'Attempting AI-powered metrics extraction...');
-            const aiMetrics = await extractMetrics(document.rows[0].content_text);
+            // First try enhanced AI validation
+            await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation with cross-validation...');
+            const enhancedResult = await enhancedAIValidation.runEnhancedValidation(document.rows[0].content_text);
             
-            if (aiMetrics && this.hasValidMetrics(aiMetrics)) {
-              console.log('✅ AI extraction successful');
-              finalMetrics = aiMetrics;
+            if (enhancedResult && enhancedResult.metrics && this.hasValidEnhancedMetrics(enhancedResult.metrics)) {
+              console.log('✅ Enhanced AI validation successful');
+              console.log(`🎯 Confidence score: ${enhancedResult.confidence}%`);
+              finalMetrics = this.convertEnhancedMetricsToStandard(enhancedResult.metrics);
             } else {
-              console.log('⚠️ AI extraction returned null/incomplete results, trying comprehensive fallback...');
-              await this.updateJobStatus(jobId, 'processing', 'AI extraction incomplete, using comprehensive fallback patterns...');
+              console.log('⚠️ Enhanced AI validation incomplete, trying standard AI extraction...');
+              await this.updateJobStatus(jobId, 'processing', 'Enhanced validation incomplete, trying standard AI extraction...');
               
-              // Use comprehensive extraction as fallback
-              const comprehensiveMetrics = extractComprehensiveMetrics(document.rows[0].content_text);
+              const aiMetrics = await extractMetrics(document.rows[0].content_text);
               
-              if (comprehensiveMetrics && this.hasValidMetrics(comprehensiveMetrics)) {
-                console.log('✅ Comprehensive extraction successful');
-                finalMetrics = comprehensiveMetrics;
+              if (aiMetrics && this.hasValidMetrics(aiMetrics)) {
+                console.log('✅ Standard AI extraction successful');
+                finalMetrics = aiMetrics;
               } else {
-                console.log('⚠️ Both AI and comprehensive extraction failed to find sufficient metrics');
-                finalMetrics = this.createEmptyMetricsStructure();
+                console.log('⚠️ Standard AI extraction failed, trying comprehensive fallback...');
+                await this.updateJobStatus(jobId, 'processing', 'AI extraction failed, using comprehensive fallback patterns...');
+                
+                // Use comprehensive extraction as fallback
+                const comprehensiveMetrics = extractComprehensiveMetrics(document.rows[0].content_text);
+                
+                if (comprehensiveMetrics && this.hasValidMetrics(comprehensiveMetrics)) {
+                  console.log('✅ Comprehensive extraction successful');
+                  finalMetrics = comprehensiveMetrics;
+                } else {
+                  console.log('⚠️ All extraction methods failed to find sufficient metrics');
+                  finalMetrics = this.createEmptyMetricsStructure();
+                }
               }
             }
             
@@ -233,6 +245,76 @@ class JobService {
     
     // Consider valid if at least 2 key metrics are found
     return validCount >= 2;
+  }
+
+  // Helper method to check if enhanced metrics contain valid data
+  hasValidEnhancedMetrics(enhancedMetrics) {
+    if (!enhancedMetrics || typeof enhancedMetrics !== 'object') return false;
+    
+    // Check if at least some key metrics have non-null values
+    const keyMetrics = [
+      'enterpriseValue',
+      'valueOfEquity',
+      'revenue',
+      'ebitda',
+      'discountRate'
+    ];
+    
+    let validCount = 0;
+    for (const metric of keyMetrics) {
+      const value = enhancedMetrics[metric];
+      if (value !== null && value !== undefined && value !== 0) {
+        validCount++;
+      }
+    }
+    
+    // Consider valid if at least 2 key metrics are found
+    return validCount >= 2;
+  }
+
+  // Convert enhanced metrics format to standard format
+  convertEnhancedMetricsToStandard(enhancedMetrics) {
+    return {
+      enterpriseValue: { 
+        currentValue: enhancedMetrics.enterpriseValue, 
+        previousValue: null, 
+        currency: "USD" 
+      },
+      valueOfEquity: { 
+        currentValue: enhancedMetrics.valueOfEquity, 
+        previousValue: null, 
+        currency: "USD" 
+      },
+      valuationPerShare: { 
+        currentValue: enhancedMetrics.valuationPerShare, 
+        previousValue: null, 
+        currency: "USD" 
+      },
+      keyFinancials: { 
+        revenue: enhancedMetrics.revenue, 
+        ebitda: enhancedMetrics.ebitda, 
+        weightedAverageCostOfCapital: enhancedMetrics.discountRate 
+      },
+      companyValuation: { 
+        totalValue: enhancedMetrics.enterpriseValue, 
+        perShareValue: enhancedMetrics.valuationPerShare, 
+        currency: "USD" 
+      },
+      discountRates: { 
+        discountRate: enhancedMetrics.discountRate, 
+        riskFreeRate: null, 
+        marketRiskPremium: null 
+      },
+      capitalStructure: { 
+        totalShares: enhancedMetrics.totalShares, 
+        esopShares: null, 
+        esopPercentage: enhancedMetrics.esopPercentage 
+      },
+      valuationMultiples: { 
+        revenueMultiple: null, 
+        ebitdaMultiple: null 
+      }
+    };
   }
   
   // Helper to safely get nested object values

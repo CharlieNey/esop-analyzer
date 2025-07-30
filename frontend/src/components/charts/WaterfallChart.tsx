@@ -45,6 +45,11 @@ const WaterfallChart: React.FC<WaterfallChartProps> = ({
           <p className="text-sm text-gray-600">
             Cumulative: <span className="font-medium">{formatValue(data.cumulative)}</span>
           </p>
+          {data.type && (
+            <p className="text-xs text-gray-500 capitalize">
+              Type: {data.type}
+            </p>
+          )}
         </div>
       );
     }
@@ -54,30 +59,46 @@ const WaterfallChart: React.FC<WaterfallChartProps> = ({
   return (
     <div className="bg-white rounded-lg p-4">
       {title && (
-        <h3 className="text-lg font-medium text-gray-900 mb-4">{title}</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4 text-center">{title}</h3>
       )}
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
           <XAxis 
             dataKey="name" 
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#374151' }}
             angle={-45}
             textAnchor="end"
             height={80}
           />
           <YAxis 
             tickFormatter={formatValue}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#6b7280' }}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="displayValue" stackId="waterfall">
+          <Bar dataKey="displayValue" stackId="waterfall" radius={[2, 2, 0, 0]}>
             {chartData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+      
+      {/* Legend */}
+      <div className="flex justify-center mt-4 space-x-6">
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 bg-green-500 rounded"></div>
+          <span className="text-sm text-gray-600">Positive</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 bg-red-500 rounded"></div>
+          <span className="text-sm text-gray-600">Negative</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 bg-gray-800 rounded"></div>
+          <span className="text-sm text-gray-600">Total</span>
+        </div>
+      </div>
     </div>
   );
 };

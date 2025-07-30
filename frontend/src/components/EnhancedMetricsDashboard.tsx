@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Building, Users, Calculator, BarChart3, Download } from 'lucide-react';
+import { TrendingUp, DollarSign, Building, Users, Calculator, BarChart3, Download } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 import html2canvas from 'html2canvas';
@@ -12,7 +12,6 @@ interface EnhancedMetricsDashboardProps {
 interface MetricCardData {
   title: string;
   currentValue: number | null | undefined;
-  previousValue?: number | null | undefined;
   format: 'currency' | 'percentage';
   icon: React.ReactNode;
   color: string;
@@ -147,7 +146,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
   const companyValuation = metrics.metrics.companyValuation?.data;
   const capitalStructure = metrics.metrics.capitalStructure?.data;
 
-  // Debug logging to help identify data issues
+  // Debug logging to help identify data issues (development only)
   if (process.env.NODE_ENV === 'development') {
     console.log('🔍 Dashboard Debug Data:', {
       enterpriseValue,
@@ -187,10 +186,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
         allFields['valuation.enterpriseValue'],
         allFields['metrics.enterpriseValue']
       ),
-      previousValue: getBestValue(
-        enterpriseValue?.previousValue,
-        enterpriseValue?.priorValue
-      ),
+
       format: 'currency',
       icon: <Building className="h-6 w-6" />,
       color: 'blue'
@@ -208,10 +204,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
         allFields['valuation.equityValue'],
         allFields['equity.value']
       ),
-      previousValue: getBestValue(
-        valueOfEquity?.previousValue,
-        valueOfEquity?.priorValue
-      ),
+
       format: 'currency',
       icon: <DollarSign className="h-6 w-6" />,
       color: 'green'
@@ -230,10 +223,7 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
         allFields['valuation.perShareValue'],
         allFields['sharePrice.value']
       ),
-      previousValue: getBestValue(
-        valuationPerShare?.previousValue,
-        valuationPerShare?.priorValue
-      ),
+
       format: 'currency',
       icon: <Users className="h-6 w-6" />,
       color: 'purple'
@@ -443,16 +433,12 @@ interface MetricCardProps extends MetricCardData {}
 const MetricCard: React.FC<MetricCardProps> = ({ 
   title, 
   currentValue, 
-  previousValue, 
   format, 
   icon, 
   color,
   ebitdaMargin
 }) => {
-  const calculatePercentageChange = (current: number | null | undefined, previous: number | null | undefined): number | null => {
-    if (!current || !previous || previous === 0) return null;
-    return ((current - previous) / previous) * 100;
-  };
+
 
   const formatCurrency = (value: number | null | undefined): string => {
     if (value === null || value === undefined) return 'N/A';
@@ -508,7 +494,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
     return 'text-base';
   };
 
-  const percentageChange = calculatePercentageChange(currentValue, previousValue);
+
   
   const colorClasses = {
     blue: 'bg-blue-50 text-blue-600',
@@ -525,18 +511,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         <div className={`p-2 rounded-lg ${colorClasses[color as keyof typeof colorClasses]}`}>
           {icon}
         </div>
-        {percentageChange !== null && (
-          <div className={`flex items-center text-sm ${
-            percentageChange >= 0 ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {percentageChange >= 0 ? (
-              <TrendingUp className="h-4 w-4 mr-1" />
-            ) : (
-              <TrendingDown className="h-4 w-4 mr-1" />
-            )}
-            {Math.abs(percentageChange).toFixed(1)}%
-          </div>
-        )}
+
       </div>
       
       <div>
@@ -549,11 +524,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
             Margin: {ebitdaMargin}%
           </p>
         )}
-        {previousValue && (
-          <p className="text-sm text-gray-500 mt-1">
-            Previous: {formatValue(previousValue)}
-          </p>
-        )}
+
       </div>
     </div>
   );

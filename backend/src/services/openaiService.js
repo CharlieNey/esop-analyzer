@@ -25,27 +25,6 @@ export const createEmbedding = async (text) => {
 
 export const answerQuestion = async (question, context, documentId = null) => {
   try {
-    // Get extracted metrics to include in context
-    let extractedMetrics = null;
-    if (documentId) {
-      try {
-        const client = await pool.connect();
-        const metricsResult = await client.query(
-          'SELECT metric_type, metric_data FROM extracted_metrics WHERE document_id = $1',
-          [documentId]
-        );
-        client.release();
-        
-        if (metricsResult.rows.length > 0) {
-          extractedMetrics = {};
-          metricsResult.rows.forEach(row => {
-            extractedMetrics[row.metric_type] = row.metric_data;
-          });
-        }
-      } catch (error) {
-        console.log('⚠️ Could not fetch extracted metrics:', error.message);
-      }
-    }
     
     // Estimate total tokens
     const questionTokens = Math.ceil(question.length / 4);
@@ -53,12 +32,16 @@ export const answerQuestion = async (question, context, documentId = null) => {
     const systemPromptTokens = 500; // Approximate
     const totalTokens = questionTokens + contextTokens + systemPromptTokens;
     
-    console.log(`📊 Token estimation: Question=${questionTokens}, Context=${contextTokens}, Total=${totalTokens}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📊 Token estimation: Question=${questionTokens}, Context=${contextTokens}, Total=${totalTokens}`);
+    }
     
     // If context is too large, truncate it more intelligently
     let finalContext = context;
     if (totalTokens > 20000) { // Increased limit for better coverage
-      console.log('⚠️ Context too large, truncating...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️ Context too large, truncating...');
+      }
       const maxContextLength = (20000 - questionTokens - systemPromptTokens) * 4;
       
       // Try to preserve complete pages instead of cutting mid-sentence
@@ -102,12 +85,6 @@ CRITICAL CITATION REQUIREMENTS:
 
 IMPORTANT: You MUST answer based ONLY on the document content provided below. If the information is not in the provided content, say "I cannot find that specific information in the provided document content" rather than making assumptions.
 
-ALIGNMENT WITH DASHBOARD DATA:
-${extractedMetrics ? `The following metrics have been extracted from this document and are displayed on the dashboard:
-${JSON.stringify(extractedMetrics, null, 2)}
-
-IMPORTANT: Your answer should be consistent with these extracted metrics. If there are discrepancies, prioritize the extracted metrics data and explain any differences.` : ''}
-
 When answering:
 1. Start each key point with a page reference (e.g., "Table 1 on Page 3 indicates that...")
 2. Use ONLY the information from the provided document pages and visual elements
@@ -117,7 +94,7 @@ When answering:
 6. Explain complex financial concepts in clear terms with page and element citations
 7. When analyzing tables, reference specific rows/columns if helpful
 8. When describing charts, mention the chart type and key data points
-9. Ensure consistency with the extracted metrics data above
+9. Base your answers ONLY on the document text content provided - do not reference any dashboard metrics or extracted data
 
 Document Content:
 ${finalContext}

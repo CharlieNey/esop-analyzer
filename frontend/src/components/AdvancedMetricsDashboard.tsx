@@ -1,16 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, BarChart3, Layers, Activity, Download, Sparkles } from 'lucide-react';
+import { TrendingUp, BarChart3, PieChart, Activity, Download, Sparkles, DollarSign, TrendingDown } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// Import new chart components
+// Import improved chart components
 import WaterfallChart from './charts/WaterfallChart';
-import SunburstChart from './charts/SunburstChart';
-import SankeyChart from './charts/SankeyChart';
 import RadarChart from './charts/RadarChart';
-import GaugeChart from './charts/GaugeChart';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart as RechartsPieChart, Pie, Cell as PieCell, Area, AreaChart } from 'recharts';
 
 interface AdvancedMetricsDashboardProps {
   documentId: string;
@@ -187,91 +185,136 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
     { name: 'Total Value', value: 0, cumulative: enterpriseValue || 0, type: 'total' as const }
   ].filter(item => item.value !== 0 || item.type === 'total');
 
-  const sunburstData = {
-    name: 'Company Valuation',
-    children: [
-      {
-        name: 'Enterprise Value',
-        value: enterpriseValue || 0,
-        children: [
-          { name: 'Operating Value', value: (enterpriseValue || 0) * 0.8 },
-          { name: 'Asset Value', value: (enterpriseValue || 0) * 0.2 }
-        ]
-      },
-      {
-        name: 'Equity Value',
-        value: valueOfEquity || 0,
-        children: [
-          { name: 'Common Shares', value: (valueOfEquity || 0) * 0.7 },
-          { name: 'ESOP Shares', value: (valueOfEquity || 0) * 0.3 }
-        ]
-      }
-    ]
-  };
-
-  const sankeyData = {
-    nodes: [
-      { name: 'Revenue' },
-      { name: 'EBITDA' },
-      { name: 'Operating Cash Flow' },
-      { name: 'Enterprise Value' },
-      { name: 'Equity Value' }
-    ],
-    links: [
-      { source: 0, target: 1, value: ebitda || 0 },
-      { source: 1, target: 2, value: (ebitda || 0) * 0.8 },
-      { source: 2, target: 3, value: enterpriseValue || 0 },
-      { source: 3, target: 4, value: valueOfEquity || 0 }
-    ]
-  };
-
+  // Improved radar data with more meaningful metrics
   const radarData = [
-    { subject: 'Revenue Growth', current: 75, benchmark: 60, fullMark: 100 },
-    { subject: 'Profitability', current: ebitda && revenue ? (ebitda / revenue) * 100 : 0, benchmark: 65, fullMark: 100 },
-    { subject: 'Valuation Multiple', current: 80, benchmark: 70, fullMark: 100 },
-    { subject: 'Market Position', current: 70, benchmark: 75, fullMark: 100 },
-    { subject: 'Financial Health', current: 85, benchmark: 80, fullMark: 100 },
-    { subject: 'ESOP Structure', current: 90, benchmark: 75, fullMark: 100 }
+    { 
+      subject: 'Revenue Growth', 
+      current: revenue ? Math.min(100, Math.max(0, (revenue / 10000000) * 100)) : 0, 
+      benchmark: 60, 
+      fullMark: 100 
+    },
+    { 
+      subject: 'EBITDA Margin', 
+      current: ebitda && revenue ? Math.min(100, Math.max(0, (ebitda / revenue) * 100)) : 0, 
+      benchmark: 25, 
+      fullMark: 100 
+    },
+    { 
+      subject: 'Valuation Multiple', 
+      current: enterpriseValue && ebitda ? Math.min(100, Math.max(0, (enterpriseValue / ebitda) * 10)) : 0, 
+      benchmark: 70, 
+      fullMark: 100 
+    },
+    { 
+      subject: 'Equity Ratio', 
+      current: valueOfEquity && enterpriseValue ? Math.min(100, Math.max(0, (valueOfEquity / enterpriseValue) * 100)) : 0, 
+      benchmark: 75, 
+      fullMark: 100 
+    },
+    { 
+      subject: 'Risk Profile', 
+      current: discountRate ? Math.max(0, 100 - (discountRate * 5)) : 0, 
+      benchmark: 80, 
+      fullMark: 100 
+    }
+  ];
+
+  // New: Valuation composition pie chart
+  const valuationCompositionData = [
+    { name: 'Enterprise Value', value: enterpriseValue || 0, color: '#3b82f6' },
+    { name: 'Equity Value', value: valueOfEquity || 0, color: '#10b981' },
+    { name: 'Debt Value', value: (enterpriseValue || 0) - (valueOfEquity || 0), color: '#f59e0b' }
+  ].filter(item => item.value > 0);
+
+  // New: Financial metrics comparison bar chart
+  const financialMetricsData = [
+    { metric: 'Revenue', value: revenue || 0, color: '#3b82f6' },
+    { metric: 'EBITDA', value: ebitda || 0, color: '#10b981' },
+    { metric: 'Enterprise Value', value: enterpriseValue || 0, color: '#8b5cf6' },
+    { metric: 'Equity Value', value: valueOfEquity || 0, color: '#f59e0b' }
+  ].filter(item => item.value > 0);
+
+  // New: Trend analysis area chart (simulated data based on current values)
+  const trendData = [
+    { period: 'Q1', revenue: (revenue || 0) * 0.8, ebitda: (ebitda || 0) * 0.75, valuation: (enterpriseValue || 0) * 0.85 },
+    { period: 'Q2', revenue: (revenue || 0) * 0.9, ebitda: (ebitda || 0) * 0.85, valuation: (enterpriseValue || 0) * 0.9 },
+    { period: 'Q3', revenue: (revenue || 0) * 0.95, ebitda: (ebitda || 0) * 0.92, valuation: (enterpriseValue || 0) * 0.95 },
+    { period: 'Q4', revenue: revenue || 0, ebitda: ebitda || 0, valuation: enterpriseValue || 0 }
   ];
 
   const chartOptions = [
     { id: 'waterfall', name: 'Value Breakdown', icon: BarChart3 },
-    { id: 'sunburst', name: 'Hierarchical View', icon: Layers },
-    { id: 'sankey', name: 'Cash Flow', icon: TrendingUp },
-    { id: 'radar', name: 'Performance', icon: Activity },
-    { id: 'gauge', name: 'Health Score', icon: Sparkles }
+    { id: 'radar', name: 'Performance Metrics', icon: Activity },
+    { id: 'composition', name: 'Valuation Composition', icon: PieChart },
+    { id: 'comparison', name: 'Financial Comparison', icon: TrendingUp },
+    { id: 'trends', name: 'Quarterly Trends', icon: TrendingDown }
   ];
 
   const renderActiveChart = () => {
     switch (activeChart) {
       case 'waterfall':
         return <WaterfallChart data={waterfallData} title="Enterprise Value Breakdown" formatValue={formatCurrency} />;
-      case 'sunburst':
-        return <SunburstChart data={sunburstData} title="Valuation Hierarchy" formatValue={formatCurrency} />;
-      case 'sankey':
-        return <SankeyChart data={sankeyData} title="Value Flow Analysis" formatValue={formatCurrency} />;
       case 'radar':
-        return <RadarChart data={radarData} title="Company Performance Radar" />;
-      case 'gauge':
+        return <RadarChart data={radarData} title="Company Performance Analysis" />;
+      case 'composition':
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <GaugeChart 
-              value={ebitda && revenue ? (ebitda / revenue) * 100 : 0} 
-              title="EBITDA Margin" 
-              unit="%" 
-              max={100}
-            />
-            <GaugeChart 
-              value={discountRate || 0} 
-              title="Discount Rate" 
-              unit="%" 
-              max={20}
-              thresholds={[
-                { value: 5, color: '#10b981', label: 'Low Risk' },
-                { value: 10, color: '#f59e0b', label: 'Medium Risk' },
-                { value: 20, color: '#ef4444', label: 'High Risk' }
-              ]}
-            />
+          <div className="bg-white rounded-lg p-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 text-center">Valuation Composition</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <RechartsPieChart>
+                <Pie
+                  data={valuationCompositionData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {valuationCompositionData.map((entry, index) => (
+                    <PieCell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: any) => formatCurrency(value)} />
+              </RechartsPieChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      case 'comparison':
+        return (
+          <div className="bg-white rounded-lg p-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 text-center">Financial Metrics Comparison</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={financialMetricsData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="metric" tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                <Bar dataKey="value">
+                  {financialMetricsData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      case 'trends':
+        return (
+          <div className="bg-white rounded-lg p-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 text-center">Quarterly Performance Trends</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                <Area type="monotone" dataKey="revenue" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} name="Revenue" />
+                <Area type="monotone" dataKey="ebitda" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} name="EBITDA" />
+                <Area type="monotone" dataKey="valuation" stackId="1" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} name="Valuation" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         );
       default:
@@ -341,19 +384,28 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
             <h3 className="text-lg font-medium text-gray-900 mb-4">Key Insights</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Valuation Health</h4>
+                <h4 className="font-medium text-blue-900 mb-2 flex items-center">
+                  <DollarSign className="h-4 w-4 mr-1" />
+                  Valuation Summary
+                </h4>
                 <p className="text-sm text-blue-800">
-                  Enterprise value of {formatCurrency(enterpriseValue)} indicates strong market position
+                  Enterprise value of {formatCurrency(enterpriseValue)} with equity value of {formatCurrency(valueOfEquity)}
                 </p>
               </div>
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h4 className="font-medium text-green-900 mb-2">Profitability</h4>
+                <h4 className="font-medium text-green-900 mb-2 flex items-center">
+                  <TrendingUp className="h-4 w-4 mr-1" />
+                  Financial Performance
+                </h4>
                 <p className="text-sm text-green-800">
                   {ebitda && revenue ? `EBITDA margin of ${((ebitda / revenue) * 100).toFixed(1)}%` : 'EBITDA data available'}
                 </p>
               </div>
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <h4 className="font-medium text-purple-900 mb-2">Risk Profile</h4>
+                <h4 className="font-medium text-purple-900 mb-2 flex items-center">
+                  <Activity className="h-4 w-4 mr-1" />
+                  Risk Assessment
+                </h4>
                 <p className="text-sm text-purple-800">
                   {discountRate ? `Discount rate of ${discountRate.toFixed(2)}%` : 'Risk assessment available'}
                 </p>
