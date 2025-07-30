@@ -13,16 +13,27 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.57.0",
+    "argon2": "^0.43.1",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "express-rate-limit": "^8.0.1",
+    "express-session": "^1.18.2",
+    "express-slow-down": "^2.1.0",
+    "express-validator": "^7.2.1",
+    "express-winston": "^4.2.0",
+    "file-type": "^21.0.0",
     "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "magic-bytes.js": "^1.12.1",
     "multer": "^1.4.5-lts.1",
     "openai": "^4.28.0",
     "pg": "^8.11.3",
     "pgvector": "^0.1.8",
     "reductoai": "^0.8.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",
