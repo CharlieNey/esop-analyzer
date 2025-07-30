@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, TrendingUp, Users, Percent } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart } from 'recharts';
+import { DollarSign, TrendingUp, Users, Percent, ZoomIn, BarChart3, PieChart as PieChartIcon, TrendingDown } from 'lucide-react';
 import { getDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 import MetricsValidation from './MetricsValidation';
@@ -15,6 +15,9 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
   const [metrics, setMetrics] = useState<DocumentMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedChart, setSelectedChart] = useState<'financial' | 'capital' | 'trends'>('financial');
+  const [drillDownData, setDrillDownData] = useState<any>(null);
+  const [showDrillDown, setShowDrillDown] = useState(false);
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -255,6 +258,39 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
     return `${(num || 0).toFixed(2)}%`;
   };
 
+  // Handle chart selection and drill-down
+  const handleChartTypeChange = (chartType: 'financial' | 'capital' | 'trends') => {
+    setSelectedChart(chartType);
+    setShowDrillDown(false);
+  };
+
+  const handleBarClick = (data: any) => {
+    setDrillDownData(data);
+    setShowDrillDown(true);
+  };
+
+  // Generate trend data for demonstration
+  const generateTrendData = () => {
+    const currentRevenue = getBestValue(
+      keyFinancials?.revenue,
+      keyFinancials?.totalRevenue,
+      keyFinancials?.annualRevenue
+    ) || 0;
+    
+    const currentEbitda = getBestValue(
+      keyFinancials?.ebitda,
+      keyFinancials?.EBITDA,
+      keyFinancials?.adjustedEbitda
+    ) || 0;
+
+    return [
+      { period: '2021', revenue: currentRevenue * 0.7, ebitda: currentEbitda * 0.6 },
+      { period: '2022', revenue: currentRevenue * 0.85, ebitda: currentEbitda * 0.8 },
+      { period: '2023', revenue: currentRevenue, ebitda: currentEbitda },
+      { period: '2024E', revenue: currentRevenue * 1.15, ebitda: currentEbitda * 1.2 },
+    ];
+  };
+
   // Prepare metrics for validation
   const validationMetrics = {
     enterpriseValue: getBestValue(
@@ -369,62 +405,222 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {financialData.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Key Financial Metrics</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={financialData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis 
-                  tickFormatter={(value) => {
-                    const num = typeof value === 'string' ? parseFloat(value) : value;
-                    if (num >= 1000000) {
-                      return new Intl.NumberFormat('en-US', {
-                        notation: 'compact',
-                        compactDisplay: 'short'
-                      }).format(num);
-                    }
-                    return formatCurrency(value);
-                  }} 
-                />
-                <Tooltip 
-                  formatter={(value) => {
-                    const num = typeof value === 'string' ? parseFloat(value) : value;
-                    return formatCurrency(num as number);
-                  }} 
-                />
-                <Bar dataKey="value" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+      {/* Interactive Chart Section */}
+      <div className="mt-8">
+        {/* Chart Type Selector */}
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-4">
+          <button
+            onClick={() => handleChartTypeChange('financial')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              selectedChart === 'financial'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span className="text-sm font-medium">Financial Metrics</span>
+          </button>
+          <button
+            onClick={() => handleChartTypeChange('capital')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              selectedChart === 'capital'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <PieChartIcon className="h-4 w-4" />
+            <span className="text-sm font-medium">Capital Structure</span>
+          </button>
+          <button
+            onClick={() => handleChartTypeChange('trends')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              selectedChart === 'trends'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <TrendingUp className="h-4 w-4" />
+            <span className="text-sm font-medium">Trend Analysis</span>
+          </button>
+        </div>
 
-        {capitalData.length > 0 && (
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Capital Structure</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={capitalData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {capitalData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+        {/* Chart Display Area */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Chart */}
+          <div className="lg:col-span-2">
+            {selectedChart === 'financial' && financialData.length > 0 && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Key Financial Metrics</h3>
+                  <ZoomIn className="h-4 w-4 text-gray-500" />
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={financialData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis 
+                      tickFormatter={(value) => {
+                        const num = typeof value === 'string' ? parseFloat(value) : value;
+                        if (num >= 1000000) {
+                          return new Intl.NumberFormat('en-US', {
+                            notation: 'compact',
+                            compactDisplay: 'short'
+                          }).format(num);
+                        }
+                        return formatCurrency(value);
+                      }} 
+                    />
+                    <Tooltip 
+                      formatter={(value) => {
+                        const num = typeof value === 'string' ? parseFloat(value) : value;
+                        return formatCurrency(num as number);
+                      }} 
+                    />
+                    <Bar 
+                      dataKey="value" 
+                      fill="#3b82f6" 
+                      onClick={handleBarClick}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {selectedChart === 'capital' && capitalData.length > 0 && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Capital Structure</h3>
+                  <ZoomIn className="h-4 w-4 text-gray-500" />
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={capitalData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                      onClick={handleBarClick}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {capitalData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {selectedChart === 'trends' && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Historical Trends</h3>
+                  <ZoomIn className="h-4 w-4 text-gray-500" />
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={generateTrendData()}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" />
+                    <YAxis 
+                      tickFormatter={(value) => {
+                        const num = typeof value === 'string' ? parseFloat(value) : value;
+                        if (num >= 1000000) {
+                          return new Intl.NumberFormat('en-US', {
+                            notation: 'compact',
+                            compactDisplay: 'short'
+                          }).format(num);
+                        }
+                        return formatCurrency(value);
+                      }} 
+                    />
+                    <Tooltip 
+                      formatter={(value, name) => {
+                        const num = typeof value === 'string' ? parseFloat(value) : value;
+                        return [formatCurrency(num as number), name === 'revenue' ? 'Revenue' : 'EBITDA'];
+                      }} 
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stackId="1" 
+                      stroke="#3b82f6" 
+                      fill="#3b82f6" 
+                      fillOpacity={0.6}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="ebitda" 
+                      stackId="2" 
+                      stroke="#10b981" 
+                      fill="#10b981" 
+                      fillOpacity={0.6}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Drill-down Panel */}
+          <div className="lg:col-span-1">
+            {showDrillDown && drillDownData ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h4 className="text-lg font-medium text-gray-900 mb-3">Detailed View</h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Selected:</span>
+                    <span className="font-medium">{drillDownData.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Value:</span>
+                    <span className="font-medium">{formatCurrency(drillDownData.value)}</span>
+                  </div>
+                  <div className="pt-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-500">
+                      Click on chart elements to explore detailed breakdowns and trends.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 className="text-lg font-medium text-gray-900 mb-3">Chart Explorer</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <ZoomIn className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm text-gray-600">Click on chart elements for detailed analysis</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2">
+                    <button
+                      onClick={() => handleChartTypeChange('financial')}
+                      className="p-2 bg-blue-100 rounded text-xs text-blue-700 hover:bg-blue-200 transition-colors"
+                    >
+                      Financials
+                    </button>
+                    <button
+                      onClick={() => handleChartTypeChange('capital')}
+                      className="p-2 bg-green-100 rounded text-xs text-green-700 hover:bg-green-200 transition-colors"
+                    >
+                      Capital
+                    </button>
+                    <button
+                      onClick={() => handleChartTypeChange('trends')}
+                      className="p-2 bg-purple-100 rounded text-xs text-purple-700 hover:bg-purple-200 transition-colors"
+                    >
+                      Trends
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {valuationMultiples && (

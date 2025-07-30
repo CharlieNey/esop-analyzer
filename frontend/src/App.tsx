@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, BarChart3, Home, Upload, MessageCircle, TrendingUp, CheckCircle, Clock, ChevronDown } from 'lucide-react';
+import { FileText, BarChart3, Home, Upload, MessageCircle, TrendingUp, CheckCircle, Clock, ChevronDown, Sparkles, Layers } from 'lucide-react';
 import UploadSection from './components/UploadSection';
 import EnhancedMetricsDashboard from './components/EnhancedMetricsDashboard';
+import AdvancedMetricsDashboard from './components/AdvancedMetricsDashboard';
 import QuestionSection from './components/QuestionSection';
 import { getDocuments, uploadPDF, pollJobUntilComplete } from './services/api';
 import { Document } from './types';
@@ -16,6 +17,7 @@ function App() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [processingMessage, setProcessingMessage] = useState<string>('');
   const [isDocumentTransitioning, setIsDocumentTransitioning] = useState<boolean>(false);
+  const [dashboardType, setDashboardType] = useState<'enhanced' | 'advanced'>('enhanced');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUploadSuccess = (documentId: string) => {
@@ -413,8 +415,41 @@ function App() {
                     </div>
 
                     {/* Right Column - Metrics Dashboard */}
-                    <div className="order-1 lg:order-2 transform transition-all duration-300 hover:scale-[1.01] lg:hover:scale-[1.02]">
-                      <EnhancedMetricsDashboard documentId={currentDocumentId} />
+                    <div className="order-1 lg:order-2 space-y-4">
+                      {/* Dashboard Type Selector */}
+                      <div className="flex flex-wrap gap-2 bg-white rounded-lg shadow-sm p-3 border border-gray-200">
+                        <button
+                          onClick={() => setDashboardType('enhanced')}
+                          className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            dashboardType === 'enhanced'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                          <span>Enhanced Dashboard</span>
+                        </button>
+                        <button
+                          onClick={() => setDashboardType('advanced')}
+                          className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            dashboardType === 'advanced'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          <Layers className="h-4 w-4" />
+                          <span>Advanced Charts</span>
+                        </button>
+                      </div>
+                      
+                      {/* Dashboard Component */}
+                      <div className="transform transition-all duration-300 hover:scale-[1.01] lg:hover:scale-[1.02]">
+                        {dashboardType === 'enhanced' ? (
+                          <EnhancedMetricsDashboard documentId={currentDocumentId} />
+                        ) : (
+                          <AdvancedMetricsDashboard documentId={currentDocumentId} />
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
