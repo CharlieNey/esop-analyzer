@@ -106,6 +106,13 @@ export const getDocumentMetrics = async (documentId: string): Promise<DocumentMe
   return response.data;
 };
 
+export const getLiveDocumentMetrics = async (documentId: string): Promise<DocumentMetrics> => {
+  const response = await api.get(`/metrics/live/${documentId}`, {
+    timeout: 300000, // 5 minutes for live AI analysis
+  });
+  return response.data;
+};
+
 export const getMetricsSummary = async (documentId: string): Promise<any> => {
   const response = await api.get(`/metrics/summary/${documentId}`);
   return response.data;

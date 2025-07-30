@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { DollarSign, TrendingUp, Users, Percent, ZoomIn, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
-import { getDocumentMetrics } from '../services/api';
+import { getDocumentMetrics, getLiveDocumentMetrics } from '../services/api';
 import { DocumentMetrics } from '../types';
 
 interface MetricsDashboardProps {
@@ -17,6 +17,8 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
   const [selectedChart, setSelectedChart] = useState<'financial' | 'capital' | 'trends'>('financial');
   const [drillDownData, setDrillDownData] = useState<any>(null);
   const [showDrillDown, setShowDrillDown] = useState(false);
+  const [useLiveData, setUseLiveData] = useState(false);
+  const [liveDataLoading, setLiveDataLoading] = useState(false);
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -34,6 +36,34 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
       fetchMetrics();
     }
   }, [documentId]);
+
+  const toggleLiveData = async () => {
+    if (!useLiveData) {
+      // Switching to live data
+      setLiveDataLoading(true);
+      try {
+        const liveData = await getLiveDocumentMetrics(documentId);
+        setMetrics(liveData);
+        setUseLiveData(true);
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to load live metrics');
+      } finally {
+        setLiveDataLoading(false);
+      }
+    } else {
+      // Switching back to stored data
+      setUseLiveData(false);
+      setLoading(true);
+      try {
+        const data = await getDocumentMetrics(documentId);
+        setMetrics(data);
+      } catch (err: any) {
+        setError(err.response?.data?.error || 'Failed to load stored metrics');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   if (loading) {
     return (
@@ -299,7 +329,35 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-gray-900">ESOP Valuation Dashboard</h2>
-          <span className="text-sm text-gray-500">{metrics.filename}</span>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500">Data Source:</span>
+              <button
+                onClick={toggleLiveData}
+                disabled={liveDataLoading}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  useLiveData
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-blue-100 text-blue-800'
+                } ${liveDataLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-opacity-80'}`}
+              >
+                {liveDataLoading ? 'Loading...' : useLiveData ? '🔴 Live AI' : '💾 Stored'}
+              </button>
+            </div>
+            <span className="text-sm text-gray-500">{metrics.filename}</span>
+          </div>
+        </div>
+
+        {/* Data source explanation */}
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <p className="text-xs text-gray-600">
+            <strong>💾 Stored:</strong> Uses pre-extracted metrics from when the document was processed.
+            <br />
+            <strong>🔴 Live AI:</strong> Performs real-time analysis of the document (same as AI Questions) - may take 30-60 seconds.
+            {useLiveData && (
+              <span className="text-green-600 font-medium"> ← Currently using live AI analysis</span>
+            )}
+          </p>
         </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
