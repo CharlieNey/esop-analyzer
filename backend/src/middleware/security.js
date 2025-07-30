@@ -3,10 +3,10 @@ import slowDown from 'express-slow-down';
 import { body, validationResult } from 'express-validator';
 import helmet from 'helmet';
 
-// API rate limiting
+// API rate limiting - generous for development/testing
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.API_RATE_LIMIT) || 100, // limit each IP to 100 requests per windowMs
+  max: parseInt(process.env.API_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 1000 : 100), // 1000 for dev, 100 for prod
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: Math.ceil((15 * 60 * 1000) / 1000) // seconds
@@ -22,10 +22,10 @@ export const apiLimiter = rateLimit({
   }
 });
 
-// Upload rate limiting - more restrictive for file uploads
+// Upload rate limiting - more generous for testing
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: parseInt(process.env.UPLOAD_RATE_LIMIT) || 5, // 5 uploads per hour per IP
+  max: parseInt(process.env.UPLOAD_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 50 : 5), // 50 for dev, 5 for prod
   message: {
     error: 'Too many file uploads from this IP, please try again later.',
     retryAfter: Math.ceil((60 * 60 * 1000) / 1000)
@@ -41,12 +41,12 @@ export const uploadLimiter = rateLimit({
   }
 });
 
-// Slow down repeated requests progressively
+// Slow down repeated requests progressively - relaxed for development
 export const speedLimiter = slowDown({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  delayAfter: 2, // allow 2 requests per windowMs without delay
-  delayMs: () => 500, // add 500ms delay per request after delayAfter
-  maxDelayMs: 20000, // max delay of 20 seconds
+  delayAfter: process.env.NODE_ENV === 'development' ? 20 : 2, // allow 20 requests in dev, 2 in prod
+  delayMs: () => process.env.NODE_ENV === 'development' ? 100 : 500, // 100ms delay in dev, 500ms in prod
+  maxDelayMs: process.env.NODE_ENV === 'development' ? 5000 : 20000, // 5s max in dev, 20s in prod
   validate: { delayMs: false } // Disable the warning
 });
 
