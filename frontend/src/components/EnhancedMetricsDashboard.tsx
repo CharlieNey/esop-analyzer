@@ -105,12 +105,12 @@ const EnhancedMetricsDashboard: React.FC<EnhancedMetricsDashboardProps> = ({ doc
       // Remove common formatting characters
       const cleaned = value.replace(/[$,\s%]/g, '');
       const parsed = parseFloat(cleaned);
-      return isNaN(parsed) || parsed === 0 ? null : parsed;
+      return isNaN(parsed) ? null : parsed;
     }
     
     // Handle numeric values
     if (typeof value === 'number') {
-      return isNaN(value) || value === 0 ? null : value;
+      return isNaN(value) ? null : value;
     }
     
     return null;

@@ -245,7 +245,7 @@ Respond with ONLY the percentage number (no % symbol). If not found, respond wit
           value *= 1000000000;
         }
         
-        if (!isNaN(value) && value > 0) {
+        if (!isNaN(value) && value >= 0) {
           // Prefer matches with explicit units or currency symbols
           const hasUnits = fullMatch.includes('million') || fullMatch.includes('billion') || fullMatch.includes('$');
           const priority = hasUnits ? 2 : 1;

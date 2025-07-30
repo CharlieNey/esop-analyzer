@@ -1,54 +1,19 @@
-import rateLimit from 'express-rate-limit';
-import slowDown from 'express-slow-down';
+// Rate limiting imports removed - no longer needed
 import { body, validationResult } from 'express-validator';
 import helmet from 'helmet';
 
-// API rate limiting - generous for development/testing
-export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.API_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 1000 : 100), // 1000 for dev, 100 for prod
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: Math.ceil((15 * 60 * 1000) / 1000) // seconds
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  handler: (req, res) => {
-    console.warn(`Rate limit exceeded for IP: ${req.ip}, URL: ${req.url}`);
-    res.status(429).json({
-      error: 'Too many requests from this IP, please try again later.',
-      retryAfter: Math.ceil((15 * 60 * 1000) / 1000)
-    });
-  }
-});
+// Rate limiting completely disabled - no-op middleware functions
+export const apiLimiter = (req, res, next) => {
+  next(); // Pass through without any rate limiting
+};
 
-// Upload rate limiting - more generous for testing
-export const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: parseInt(process.env.UPLOAD_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 50 : 5), // 50 for dev, 5 for prod
-  message: {
-    error: 'Too many file uploads from this IP, please try again later.',
-    retryAfter: Math.ceil((60 * 60 * 1000) / 1000)
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    console.warn(`Upload rate limit exceeded for IP: ${req.ip}`);
-    res.status(429).json({
-      error: 'Too many file uploads from this IP, please try again later.',
-      retryAfter: Math.ceil((60 * 60 * 1000) / 1000)
-    });
-  }
-});
+export const uploadLimiter = (req, res, next) => {
+  next(); // Pass through without any rate limiting
+};
 
-// Slow down repeated requests progressively - relaxed for development
-export const speedLimiter = slowDown({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  delayAfter: process.env.NODE_ENV === 'development' ? 20 : 2, // allow 20 requests in dev, 2 in prod
-  delayMs: () => process.env.NODE_ENV === 'development' ? 100 : 500, // 100ms delay in dev, 500ms in prod
-  maxDelayMs: process.env.NODE_ENV === 'development' ? 5000 : 20000, // 5s max in dev, 20s in prod
-  validate: { delayMs: false } // Disable the warning
-});
+export const speedLimiter = (req, res, next) => {
+  next(); // Pass through without any speed limiting
+};
 
 // Enhanced helmet configuration
 export const securityHeaders = helmet({

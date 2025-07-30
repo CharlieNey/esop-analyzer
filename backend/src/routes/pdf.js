@@ -3,6 +3,7 @@ import { processPDF, getDocuments, getDocumentById } from '../services/pdfServic
 import { extractMetrics } from '../services/openaiService.js';
 import { pool } from '../models/database.js';
 import { jobService } from '../services/jobService.js';
+import { FileValidator } from '../middleware/fileValidation.js';
 
 const extractFallbackMetrics = (documentText) => {
   // Parse document text for key ESOP metrics when OpenAI is unavailable
@@ -93,6 +94,11 @@ router.post('/upload', async (req, res) => {
 
     // Create a background processing job
     const jobId = await jobService.createJob(req.file.originalname, req.file.path);
+    
+    // Clean up old PDFs after successful upload (async, don't wait)
+    FileValidator.cleanupOldPdfs('uploads/', 10).catch(err => {
+      console.error('PDF cleanup after upload failed:', err.message);
+    });
     
     // Return immediately with job ID
     res.status(202).json({

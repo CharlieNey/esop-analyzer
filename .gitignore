@@ -81,4 +81,23 @@ test_extraction.js
 
 # Temporary files
 temp/
-tmp/
+tmp/# Environment files
+backend/.env
+frontend/.env
+*.env.local
+*.env.production
+
+# Security
+*.key
+*.pem
+*.crt
+*.p12
+
+# Logs
+logs/
+*.log
+
+# Uploads (for production)
+backend/uploads/*.pdf
+backend/uploads/*.txt
+!backend/uploads/.gitkeep

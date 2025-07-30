@@ -161,7 +161,8 @@ export const requestLogger = expressWinston.logger({
     if (process.env.NODE_ENV === 'production') {
       return req.url === '/api/health' || req.url.startsWith('/uploads/');
     }
-    return false;
+    // Skip most requests in development to reduce terminal noise
+    return req.url === '/api/health' || req.url.startsWith('/uploads/') || req.method === 'GET';
   }
 });
 

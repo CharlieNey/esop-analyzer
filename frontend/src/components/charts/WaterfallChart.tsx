@@ -19,7 +19,17 @@ const WaterfallChart: React.FC<WaterfallChartProps> = ({
   data, 
   title = "Waterfall Analysis", 
   height = 300,
-  formatValue = (value) => `$${(value / 1000000).toFixed(1)}M`
+  formatValue = (value) => {
+    if (Math.abs(value) >= 1000000000) {
+      return `$${(value / 1000000000).toFixed(1)}B`;
+    } else if (Math.abs(value) >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}M`;
+    } else if (Math.abs(value) >= 1000) {
+      return `$${(value / 1000).toFixed(0)}K`;
+    } else {
+      return `$${value.toFixed(0)}`;
+    }
+  }
 }) => {
   // Transform data for waterfall effect
   const chartData = data.map((item, index) => {

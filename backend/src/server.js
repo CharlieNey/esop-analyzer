@@ -10,9 +10,6 @@ import metricsRoutes from './routes/metrics.js';
 
 // Security middleware imports
 import { 
-  apiLimiter, 
-  uploadLimiter, 
-  speedLimiter, 
   securityHeaders,
   validatePdfUpload,
   validateQuestion,
@@ -36,7 +33,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Trust proxy for accurate IP addresses (important for rate limiting)
+// Trust proxy for accurate IP addresses
 app.set('trust proxy', 1);
 
 // Security headers
@@ -44,9 +41,6 @@ app.use(securityHeaders);
 
 // Request logging (before other middleware to capture all requests)
 app.use(requestLogger);
-
-// Progressive request slowing
-app.use(speedLimiter);
 
 // CORS with enhanced security
 app.use(cors({
@@ -104,8 +98,7 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static('uploads'));
 
-// Apply rate limiting to API routes
-app.use('/api', apiLimiter);
+// Rate limiting removed for development
 
 // Public routes (no authentication required)
 app.get('/api/health', (req, res) => {
@@ -134,9 +127,8 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Protected routes with authentication and validation
+// Protected routes with validation (rate limiting removed)
 app.use('/api/pdf',
-  uploadLimiter, // More restrictive rate limiting for uploads
   upload.single('pdf'), // Handle file upload
   validatePdfUpload, // Validate form data
   async (req, res, next) => {
@@ -210,10 +202,7 @@ app.use((err, req, res, next) => {
     logSecurityEvent('INVALID_FILE_TYPE', { mimetype: req.file?.mimetype }, req);
   }
   
-  // Rate limiting errors
-  if (statusCode === 429) {
-    logSecurityEvent('RATE_LIMIT_EXCEEDED', { ip: req.ip, url: req.originalUrl }, req);
-  }
+  // Rate limiting removed
   
   res.status(statusCode).json({
     error: message,
@@ -234,6 +223,13 @@ const server = app.listen(PORT, () => {
     jobService.cleanupOldJobs(7); // Clean jobs older than 7 days
   }).catch(err => {
     console.error('Failed to cleanup old jobs:', err.message);
+  });
+  
+  // Clean up old PDF files on startup
+  import('./middleware/fileValidation.js').then(({ FileValidator }) => {
+    FileValidator.cleanupOldPdfs('uploads/', 10); // Keep only last 10 PDFs
+  }).catch(err => {
+    console.error('Failed to cleanup old PDFs:', err.message);
   });
 });
 

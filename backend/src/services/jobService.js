@@ -71,34 +71,46 @@ class JobService {
             await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation with cross-validation...');
             const enhancedResult = await enhancedAIValidation.runEnhancedValidation(document.rows[0].content_text);
             
+            // Always start with standard AI extraction as the base
+            console.log('🔍 Step 1: Running standard AI extraction as base...');
+            await this.updateJobStatus(jobId, 'processing', 'Running standard AI extraction...');
+            const aiMetrics = await extractMetrics(document.rows[0].content_text);
+            
+            let baseMetrics = null;
+            if (aiMetrics && this.hasValidMetrics(aiMetrics)) {
+              console.log('✅ Standard AI extraction successful');
+              baseMetrics = aiMetrics;
+            } else {
+              console.log('⚠️ Standard AI extraction failed, trying comprehensive fallback...');
+              await this.updateJobStatus(jobId, 'processing', 'AI extraction failed, using comprehensive fallback patterns...');
+              
+              // Use comprehensive extraction as fallback
+              const comprehensiveMetrics = extractComprehensiveMetrics(document.rows[0].content_text);
+              
+              if (comprehensiveMetrics && this.hasValidMetrics(comprehensiveMetrics)) {
+                console.log('✅ Comprehensive extraction successful');
+                baseMetrics = comprehensiveMetrics;
+              } else {
+                console.log('⚠️ Standard and comprehensive extraction failed, creating base structure...');
+                baseMetrics = this.createEmptyMetricsStructure();
+              }
+            }
+
+            // Now try enhanced AI validation to AUGMENT the base metrics
+            console.log('🚀 Step 2: Running enhanced AI validation to augment base metrics...');
+            await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation to improve metrics...');
+            
             if (enhancedResult && enhancedResult.metrics && this.hasValidEnhancedMetrics(enhancedResult.metrics)) {
               console.log('✅ Enhanced AI validation successful');
               console.log(`🎯 Confidence score: ${enhancedResult.confidence}%`);
-              finalMetrics = this.convertEnhancedMetricsToStandard(enhancedResult.metrics);
+              
+              // MERGE enhanced metrics with base metrics (enhanced only replaces NULL values)
+              const enhancedStandard = this.convertEnhancedMetricsToStandard(enhancedResult.metrics);
+              finalMetrics = this.mergeMetricsIntelligently(baseMetrics, enhancedStandard);
+              console.log('🔄 Merged enhanced validation with base metrics');
             } else {
-              console.log('⚠️ Enhanced AI validation incomplete, trying standard AI extraction...');
-              await this.updateJobStatus(jobId, 'processing', 'Enhanced validation incomplete, trying standard AI extraction...');
-              
-              const aiMetrics = await extractMetrics(document.rows[0].content_text);
-              
-              if (aiMetrics && this.hasValidMetrics(aiMetrics)) {
-                console.log('✅ Standard AI extraction successful');
-                finalMetrics = aiMetrics;
-              } else {
-                console.log('⚠️ Standard AI extraction failed, trying comprehensive fallback...');
-                await this.updateJobStatus(jobId, 'processing', 'AI extraction failed, using comprehensive fallback patterns...');
-                
-                // Use comprehensive extraction as fallback
-                const comprehensiveMetrics = extractComprehensiveMetrics(document.rows[0].content_text);
-                
-                if (comprehensiveMetrics && this.hasValidMetrics(comprehensiveMetrics)) {
-                  console.log('✅ Comprehensive extraction successful');
-                  finalMetrics = comprehensiveMetrics;
-                } else {
-                  console.log('⚠️ All extraction methods failed to find sufficient metrics');
-                  finalMetrics = this.createEmptyMetricsStructure();
-                }
-              }
+              console.log('⚠️ Enhanced AI validation incomplete, using base metrics');
+              finalMetrics = baseMetrics;
             }
             
             // Store the final metrics
@@ -238,7 +250,7 @@ class JobService {
     let validCount = 0;
     for (const path of keyMetricPaths) {
       const value = this.getNestedValue(metrics, path);
-      if (value !== null && value !== undefined && value !== 0) {
+      if (value !== null && value !== undefined) {
         validCount++;
       }
     }
@@ -263,13 +275,51 @@ class JobService {
     let validCount = 0;
     for (const metric of keyMetrics) {
       const value = enhancedMetrics[metric];
-      if (value !== null && value !== undefined && value !== 0) {
+      if (value !== null && value !== undefined) {
         validCount++;
       }
     }
     
     // Consider valid if at least 2 key metrics are found
     return validCount >= 2;
+  }
+
+  // Intelligently merge enhanced metrics with base metrics
+  // Enhanced metrics ONLY replace base metrics if the base value is null/undefined
+  mergeMetricsIntelligently(baseMetrics, enhancedMetrics) {
+    console.log('🔄 Merging enhanced metrics with base metrics...');
+    
+    const merged = JSON.parse(JSON.stringify(baseMetrics)); // Deep clone
+    
+    // Helper function to safely merge nested objects
+    const mergeNested = (baseObj, enhancedObj, path = '') => {
+      if (!enhancedObj || typeof enhancedObj !== 'object') return;
+      
+      for (const [key, enhancedValue] of Object.entries(enhancedObj)) {
+        const fullPath = path ? `${path}.${key}` : key;
+        
+        if (enhancedValue && typeof enhancedValue === 'object' && !Array.isArray(enhancedValue)) {
+          // Recursively merge nested objects
+          if (!baseObj[key]) baseObj[key] = {};
+          mergeNested(baseObj[key], enhancedValue, fullPath);
+        } else {
+          // Only replace if base value is null, undefined, or 0 and enhanced has a meaningful value
+          const baseValue = baseObj[key];
+          const shouldReplace = (baseValue === null || baseValue === undefined || baseValue === 0) && 
+                               (enhancedValue !== null && enhancedValue !== undefined && enhancedValue !== 0);
+          
+          if (shouldReplace) {
+            console.log(`  ✅ Enhanced ${fullPath}: ${baseValue} → ${enhancedValue}`);
+            baseObj[key] = enhancedValue;
+          } else if (baseValue !== null && baseValue !== undefined && baseValue !== 0) {
+            console.log(`  ⚪ Kept base ${fullPath}: ${baseValue} (enhanced: ${enhancedValue})`);
+          }
+        }
+      }
+    };
+    
+    mergeNested(merged, enhancedMetrics);
+    return merged;
   }
 
   // Convert enhanced metrics format to standard format

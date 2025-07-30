@@ -1,6 +1,7 @@
 import { fileTypeFromBuffer } from 'file-type';
-import { readFile, stat, unlink } from 'fs/promises';
+import { readFile, stat, unlink, readdir } from 'fs/promises';
 import { logSecurityEvent } from './security.js';
+import path from 'path';
 
 export class FileValidator {
   static async validatePdf(filePath, req) {
@@ -169,6 +170,64 @@ export class FileValidator {
       .substring(0, 50); // Limit length
     
     return `${baseName}_${timestamp}_${random}.${extension}`;
+  }
+  
+  // Clean up old PDF files, keeping only the most recent N files
+  static async cleanupOldPdfs(uploadsDir = 'uploads/', keepCount = 10) {
+    try {
+      const files = await readdir(uploadsDir);
+      
+      // Filter PDF files and get their stats
+      const pdfFiles = [];
+      for (const file of files) {
+        if (file.toLowerCase().endsWith('.pdf')) {
+          const filePath = path.join(uploadsDir, file);
+          try {
+            const stats = await stat(filePath);
+            pdfFiles.push({
+              name: file,
+              path: filePath,
+              mtime: stats.mtime
+            });
+          } catch (error) {
+            console.warn(`Could not stat file ${file}:`, error.message);
+          }
+        }
+      }
+      
+      // Sort by modification time (newest first)
+      pdfFiles.sort((a, b) => b.mtime - a.mtime);
+      
+      // Remove files beyond the keep count
+      const filesToDelete = pdfFiles.slice(keepCount);
+      let deletedCount = 0;
+      
+      for (const file of filesToDelete) {
+        try {
+          await unlink(file.path);
+          deletedCount++;
+          console.log(`Cleaned up old PDF: ${file.name}`);
+        } catch (error) {
+          console.error(`Failed to delete ${file.path}:`, error.message);
+        }
+      }
+      
+      console.log(`PDF cleanup completed: ${deletedCount} files deleted, ${pdfFiles.length - deletedCount} files kept`);
+      return {
+        totalFound: pdfFiles.length,
+        deleted: deletedCount,
+        kept: pdfFiles.length - deletedCount
+      };
+      
+    } catch (error) {
+      console.error('Error during PDF cleanup:', error.message);
+      return {
+        totalFound: 0,
+        deleted: 0,
+        kept: 0,
+        error: error.message
+      };
+    }
   }
 }
 
