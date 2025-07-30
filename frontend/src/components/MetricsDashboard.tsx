@@ -347,7 +347,10 @@ const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ documentId }) => {
 
   return (
     <div className="space-y-6">
-
+      {/* TEST BANNER - Remove this after confirming toggle works */}
+      <div className="bg-red-500 text-white p-4 rounded-lg text-center font-bold">
+        🚨 TOGGLE TEST: If you see this red banner, the code is updated! Look for the toggle button below.
+      </div>
       
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between mb-6">
