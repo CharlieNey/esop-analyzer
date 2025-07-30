@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { BarChart3, Download, Sparkles, TrendingUp } from 'lucide-react';
+import { BarChart3, Download, Sparkles, TrendingUp, RefreshCw, Database } from 'lucide-react';
 import { getDocumentMetrics, getEnhancedMetrics, askQuestion } from '../services/api';
 import { DocumentMetrics } from '../types';
 import html2canvas from 'html2canvas';
@@ -7,6 +7,76 @@ import jsPDF from 'jspdf';
 
 // Import improved chart components
 import LinearTrendChart from './charts/LinearTrendChart';
+
+// Cache management utilities
+const CACHE_PREFIX = 'chart_data_';
+const CACHE_VERSION = '1.0';
+const CACHE_EXPIRY_HOURS = 24;
+
+interface CachedChartData {
+  version: string;
+  timestamp: number;
+  documentId: string;
+  enhancedMetrics: any;
+  fallbackHistoricalData: any;
+  processedTrendData: any;
+}
+
+const getCacheKey = (documentId: string) => `${CACHE_PREFIX}${documentId}`;
+
+const setCachedChartData = (documentId: string, data: Omit<CachedChartData, 'version' | 'timestamp' | 'documentId'>) => {
+  try {
+    const cacheData: CachedChartData = {
+      version: CACHE_VERSION,
+      timestamp: Date.now(),
+      documentId,
+      ...data
+    };
+    localStorage.setItem(getCacheKey(documentId), JSON.stringify(cacheData));
+    console.log('✅ Chart data cached for document:', documentId);
+  } catch (error) {
+    console.warn('⚠️ Failed to cache chart data:', error);
+  }
+};
+
+const getCachedChartData = (documentId: string): CachedChartData | null => {
+  try {
+    const cached = localStorage.getItem(getCacheKey(documentId));
+    if (!cached) return null;
+    
+    const data: CachedChartData = JSON.parse(cached);
+    
+    // Check version compatibility
+    if (data.version !== CACHE_VERSION) {
+      console.log('🔄 Cache version mismatch, invalidating cache for:', documentId);
+      localStorage.removeItem(getCacheKey(documentId));
+      return null;
+    }
+    
+    // Check expiry
+    const isExpired = Date.now() - data.timestamp > CACHE_EXPIRY_HOURS * 60 * 60 * 1000;
+    if (isExpired) {
+      console.log('⏱️ Cache expired for document:', documentId);
+      localStorage.removeItem(getCacheKey(documentId));
+      return null;
+    }
+    
+    console.log('✅ Using cached chart data for document:', documentId);
+    return data;
+  } catch (error) {
+    console.warn('⚠️ Failed to retrieve cached chart data:', error);
+    return null;
+  }
+};
+
+const clearCachedChartData = (documentId: string) => {
+  try {
+    localStorage.removeItem(getCacheKey(documentId));
+    console.log('🗑️ Cleared cache for document:', documentId);
+  } catch (error) {
+    console.warn('⚠️ Failed to clear cache:', error);
+  }
+};
 
 interface AdvancedMetricsDashboardProps {
   documentId: string;
@@ -21,12 +91,40 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
   const [loadingEnhanced, setLoadingEnhanced] = useState(false);
   const [fallbackHistoricalData, setFallbackHistoricalData] = useState<any>(null);
   const [loadingFallback, setLoadingFallback] = useState(false);
+  const [processedTrendData, setProcessedTrendData] = useState<any>(null);
+  const [cacheLoaded, setCacheLoaded] = useState(false);
+
+  // Load cached data first
+  useEffect(() => {
+    if (!documentId) return;
+    
+    const cachedData = getCachedChartData(documentId);
+    if (cachedData) {
+      console.log('📦 Loading cached chart data:', cachedData);
+      setEnhancedMetrics(cachedData.enhancedMetrics);
+      setFallbackHistoricalData(cachedData.fallbackHistoricalData);
+      setProcessedTrendData(cachedData.processedTrendData);
+      setCacheLoaded(true);
+    } else {
+      setCacheLoaded(true);
+    }
+  }, [documentId]);
 
   useEffect(() => {
     const fetchMetrics = async () => {
+      if (!cacheLoaded) return; // Wait for cache to be checked first
+      
       try {
         const data = await getDocumentMetrics(documentId);
         setMetrics(data);
+        
+        // Skip enhanced metrics fetch if we have cached data
+        const cachedData = getCachedChartData(documentId);
+        if (cachedData && (cachedData.enhancedMetrics || cachedData.fallbackHistoricalData)) {
+          console.log('📦 Using cached enhanced/fallback data, skipping API call');
+          setLoading(false);
+          return;
+        }
         
         // Try to fetch enhanced metrics with historical data
         setLoadingEnhanced(true);
@@ -35,6 +133,13 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
           console.log('🔍 Enhanced metrics response:', enhancedData);
           console.log('📊 Historical data:', enhancedData?.historicalData);
           setEnhancedMetrics(enhancedData);
+          
+          // Cache the enhanced metrics
+          setCachedChartData(documentId, {
+            enhancedMetrics: enhancedData,
+            fallbackHistoricalData: null,
+            processedTrendData: null
+          });
         } catch (enhancedErr) {
           console.log('Enhanced metrics not available:', enhancedErr);
           // Don't set error for enhanced metrics, just continue without them
@@ -48,10 +153,10 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
       }
     };
 
-    if (documentId) {
+    if (documentId && cacheLoaded) {
       fetchMetrics();
     }
-  }, [documentId]);
+  }, [documentId, cacheLoaded]);
 
   // Fallback function to fetch historical data using direct AI questions
   const fetchFallbackHistoricalData = useCallback(async () => {
@@ -183,6 +288,13 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
       if (Object.keys(fallbackData).length > 0) {
         console.log('✅ Successfully fetched fallback historical data:', fallbackData);
         setFallbackHistoricalData(fallbackData);
+        
+        // Cache the fallback data
+        setCachedChartData(documentId, {
+          enhancedMetrics: enhancedMetrics,
+          fallbackHistoricalData: fallbackData,
+          processedTrendData: null
+        });
       } else {
         console.log('❌ No historical data found in fallback queries');
       }
@@ -192,7 +304,7 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
     } finally {
       setLoadingFallback(false);
     }
-  }, [documentId, loadingFallback, fallbackHistoricalData]);
+  }, [documentId, loadingFallback, fallbackHistoricalData, enhancedMetrics]);
 
   // Helper function to parse historical data responses
   const parseHistoricalResponse = (response: string, type: string) => {
@@ -346,11 +458,12 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
   // Auto-trigger AI historical data fetch when component mounts if no historical data
   useEffect(() => {
     // Only auto-fetch if we have metrics, no enhanced metrics, no fallback data, and not already loading
-    if (metrics && !loadingEnhanced && !enhancedMetrics?.historicalData && !fallbackHistoricalData && !loadingFallback) {
+    // Also check that cache has been loaded to avoid unnecessary fetches
+    if (metrics && cacheLoaded && !loadingEnhanced && !enhancedMetrics?.historicalData && !fallbackHistoricalData && !loadingFallback) {
       console.log('🚀 Auto-triggering AI historical data fetch for Advanced Charts...');
       fetchFallbackHistoricalData();
     }
-  }, [metrics, loadingEnhanced, enhancedMetrics, fallbackHistoricalData, loadingFallback, fetchFallbackHistoricalData]);
+  }, [metrics, cacheLoaded, loadingEnhanced, enhancedMetrics, fallbackHistoricalData, loadingFallback, fetchFallbackHistoricalData]);
 
   // Helper function to get the report year from valuation date
   const getReportYear = (): number => {
@@ -414,6 +527,19 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
     pdf.save(`${metrics?.filename || 'advanced-dashboard'}.pdf`);
   };
 
+  const handleClearCache = () => {
+    clearCachedChartData(documentId);
+    // Reset all cached states
+    setEnhancedMetrics(null);
+    setFallbackHistoricalData(null);
+    setProcessedTrendData(null);
+    // Trigger a re-fetch
+    if (metrics) {
+      console.log('🔄 Cache cleared, re-fetching data...');
+      fetchFallbackHistoricalData();
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -457,6 +583,12 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
 
   // Process historical data for trend charts with better fallback
   const processHistoricalData = () => {
+    // Use cached processed data if available
+    if (processedTrendData) {
+      console.log('📦 Using cached processed trend data');
+      return processedTrendData;
+    }
+    
     console.log('🔍 Processing historical data, enhancedMetrics:', enhancedMetrics);
     console.log('🔍 Fallback historical data:', fallbackHistoricalData);
     
@@ -621,7 +753,19 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
     });
 
     console.log('📈 Built trend data:', trendData);
-    return trendData.length >= 2 ? trendData : null;
+    const finalTrendData = trendData.length >= 2 ? trendData : null;
+    
+    // Cache the processed trend data
+    if (finalTrendData) {
+      setProcessedTrendData(finalTrendData);
+      setCachedChartData(documentId, {
+        enhancedMetrics: enhancedMetrics,
+        fallbackHistoricalData: fallbackHistoricalData,
+        processedTrendData: finalTrendData
+      });
+    }
+    
+    return finalTrendData;
   };
 
   const trendData = processHistoricalData();
@@ -1119,6 +1263,12 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <Sparkles className="h-6 w-6 text-blue-600 mr-2" />
               Advanced Analytics Dashboard
+              {getCachedChartData(documentId) && (
+                <div className="ml-3 flex items-center text-green-600 text-sm">
+                  <Database className="h-4 w-4 mr-1" />
+                  <span>Cached</span>
+                </div>
+              )}
             </h2>
             <div className="flex flex-col md:flex-row md:items-center md:space-x-4 mt-1">
               <span className="text-sm text-gray-500">{metrics.filename}</span>
@@ -1130,13 +1280,24 @@ const AdvancedMetricsDashboard: React.FC<AdvancedMetricsDashboardProps> = ({ doc
               </span>
             </div>
           </div>
-          <button
-            onClick={handleDownload}
-            className="p-2 rounded hover:bg-blue-100 transition-colors"
-            title="Download Dashboard"
-          >
-            <Download className="h-6 w-6 text-blue-600" />
-          </button>
+          <div className="flex items-center space-x-2">
+            {getCachedChartData(documentId) && (
+              <button
+                onClick={handleClearCache}
+                className="p-2 rounded hover:bg-orange-100 transition-colors"
+                title="Clear Cache & Refresh Data"
+              >
+                <RefreshCw className="h-5 w-5 text-orange-600" />
+              </button>
+            )}
+            <button
+              onClick={handleDownload}
+              className="p-2 rounded hover:bg-blue-100 transition-colors"
+              title="Download Dashboard"
+            >
+              <Download className="h-6 w-6 text-blue-600" />
+            </button>
+          </div>
         </div>
 
 
