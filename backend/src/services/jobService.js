@@ -280,9 +280,9 @@ class JobService {
   }
 
   // Intelligently merge enhanced metrics with base metrics
-  // Enhanced metrics ONLY replace base metrics if the base value is null/undefined
+  // Enhanced metrics ALWAYS replace base metrics when enhanced values are not null/undefined
   mergeMetricsIntelligently(baseMetrics, enhancedMetrics) {
-    console.log('🔄 Merging enhanced metrics with base metrics...');
+    console.log('🔄 Merging enhanced metrics with base metrics (enhanced takes priority)...');
     
     const merged = JSON.parse(JSON.stringify(baseMetrics)); // Deep clone
     
@@ -298,16 +298,15 @@ class JobService {
           if (!baseObj[key]) baseObj[key] = {};
           mergeNested(baseObj[key], enhancedValue, fullPath);
         } else {
-          // Only replace if base value is null, undefined, or 0 and enhanced has a meaningful value
+          // Always use enhanced value if it's not null/undefined, otherwise keep base value
           const baseValue = baseObj[key];
-          const shouldReplace = (baseValue === null || baseValue === undefined || baseValue === 0) && 
-                               (enhancedValue !== null && enhancedValue !== undefined && enhancedValue !== 0);
+          const shouldUseEnhanced = (enhancedValue !== null && enhancedValue !== undefined);
           
-          if (shouldReplace) {
-            console.log(`  ✅ Enhanced ${fullPath}: ${baseValue} → ${enhancedValue}`);
+          if (shouldUseEnhanced) {
+            console.log(`  ✅ Using enhanced ${fullPath}: ${baseValue} → ${enhancedValue}`);
             baseObj[key] = enhancedValue;
-          } else if (baseValue !== null && baseValue !== undefined && baseValue !== 0) {
-            console.log(`  ⚪ Kept base ${fullPath}: ${baseValue} (enhanced: ${enhancedValue})`);
+          } else if (baseValue !== null && baseValue !== undefined) {
+            console.log(`  ⚪ Kept base ${fullPath}: ${baseValue} (enhanced was null/undefined)`);
           }
         }
       }
