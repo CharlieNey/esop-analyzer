@@ -130,6 +130,13 @@ export const getAIMetrics = async (documentId: string): Promise<any> => {
   return response.data;
 };
 
+export const getEnhancedMetrics = async (documentId: string): Promise<any> => {
+  const response = await api.get(`/metrics/enhanced/${documentId}`, {
+    timeout: 300000, // 5 minutes for enhanced AI analysis with historical data
+  });
+  return response.data;
+};
+
 export const healthCheck = async (): Promise<any> => {
   const response = await api.get('/health');
   return response.data;

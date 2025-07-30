@@ -24,6 +24,7 @@ function App() {
     setCurrentDocumentId(documentId);
     setIsAnalysisComplete(false); // Reset analysis state when new document is uploaded
     setIsUploadingNew(false); // Hide upload section after successful upload
+    setDashboardType('enhanced'); // Auto-select enhanced dashboard for new uploads
   };
 
   const handleFileUpload = async (file: File) => {
@@ -78,6 +79,9 @@ function App() {
   const handleDocumentSwitch = async (documentId: string) => {
     setIsDocumentTransitioning(true);
     setShowRecentDropdown(false);
+    
+    // Reset dashboard type to enhanced when switching documents
+    setDashboardType('enhanced');
     
     // Small delay to show the transition animation
     await new Promise(resolve => setTimeout(resolve, 150));

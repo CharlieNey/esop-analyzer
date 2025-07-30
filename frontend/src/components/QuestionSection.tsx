@@ -103,7 +103,7 @@ const QuestionSection: React.FC<QuestionSectionProps> = ({ documentId }) => {
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-xl font-semibold text-gray-900 flex items-center">
           <MessageCircle className="h-5 w-5 mr-2" />
-          Ask Questions About the Document
+          Ask Questions about your Document
         </h2>
       </div>
 
