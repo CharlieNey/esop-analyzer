@@ -89,32 +89,32 @@ router.get('/live/:documentId', async (req, res) => {
       const metricQuestions = [
         {
           key: 'companyValue',
-          question: 'What is the total company valuation or enterprise value mentioned in this document? Provide only the numeric value with no formatting.',
+          question: 'What is the total company valuation or enterprise value mentioned in this document? Please provide the answer in the format "X million" or "X billion" or the exact dollar amount like "$X,XXX,XXX".',
           category: 'companyValuation'
         },
         {
           key: 'perShareValue', 
-          question: 'What is the fair market value per share or price per share mentioned in this document? Provide only the numeric value.',
+          question: 'What is the fair market value per share or price per share mentioned in this document? Please provide the answer as a dollar amount like "$XX.XX".',
           category: 'companyValuation'
         },
         {
           key: 'esopPercentage',
-          question: 'What percentage of the company is owned by the ESOP or employees? Provide only the numeric percentage value.',
+          question: 'What percentage of the company is owned by the ESOP or employees? Please provide the answer as "X%" or "X percent".',
           category: 'capitalStructure'
         },
         {
           key: 'discountRate',
-          question: 'What is the discount rate or WACC (weighted average cost of capital) mentioned in this document? Provide only the numeric percentage value.',
+          question: 'What is the discount rate or WACC (weighted average cost of capital) mentioned in this document? Please provide the answer as "X%" or "X percent".',
           category: 'discountRates'
         },
         {
           key: 'revenue',
-          question: 'What is the annual revenue of the company mentioned in this document? Provide only the numeric value.',
+          question: 'What is the annual revenue of the company mentioned in this document? Please provide the answer in the format "X million" or "X billion" or the exact dollar amount.',
           category: 'keyFinancials'
         },
         {
           key: 'ebitda',
-          question: 'What is the EBITDA (earnings before interest, taxes, depreciation, and amortization) mentioned in this document? Provide only the numeric value.',
+          question: 'What is the EBITDA (earnings before interest, taxes, depreciation, and amortization) mentioned in this document? Please provide the answer in the format "X million" or "X billion" or the exact dollar amount.',
           category: 'keyFinancials'
         }
       ];
@@ -171,43 +171,60 @@ const parseNumericAnswer = (answer) => {
   // Clean the answer and extract numbers
   const cleaned = answer.trim().toLowerCase();
   
+  console.log(`📝 Parsing answer: "${cleaned}"`);
+  
   // Handle negative responses
   if (cleaned.includes('not found') || cleaned.includes('not mentioned') || 
-      cleaned.includes('unclear') || cleaned.includes('not specified')) {
+      cleaned.includes('unclear') || cleaned.includes('not specified') ||
+      cleaned.includes('n/a') || cleaned.includes('unavailable')) {
     return null;
   }
   
-  // Extract numeric patterns
+  // Extract numeric patterns in order of specificity (most specific first)
   const patterns = [
-    // Currency with units (e.g., "$5.2 million", "$1.5B")
-    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|m|billion|b)\b/gi,
-    // Numbers with units (e.g., "5.2 million", "1.5 billion")
-    /([\d,]+(?:\.\d+)?)\s*(?:million|m|billion|b)\b/gi,
+    // Currency with billion (e.g., "$1.5 billion", "$1.5B")
+    { regex: /\$\s*([\d,]+(?:\.\d+)?)\s*billion/gi, multiplier: 1000000000 },
+    { regex: /\$\s*([\d,]+(?:\.\d+)?)\s*b\b/gi, multiplier: 1000000000 },
+    
+    // Currency with million (e.g., "$5.2 million", "$5.2M")  
+    { regex: /\$\s*([\d,]+(?:\.\d+)?)\s*million/gi, multiplier: 1000000 },
+    { regex: /\$\s*([\d,]+(?:\.\d+)?)\s*m\b/gi, multiplier: 1000000 },
+    
+    // Numbers with billion (e.g., "1.5 billion")
+    { regex: /([\d,]+(?:\.\d+)?)\s*billion/gi, multiplier: 1000000000 },
+    { regex: /([\d,]+(?:\.\d+)?)\s*b\b/gi, multiplier: 1000000000 },
+    
+    // Numbers with million (e.g., "5.2 million")
+    { regex: /([\d,]+(?:\.\d+)?)\s*million/gi, multiplier: 1000000 },
+    { regex: /([\d,]+(?:\.\d+)?)\s*m\b/gi, multiplier: 1000000 },
+    
     // Percentages (e.g., "15%", "15 percent")
-    /([\d,]+(?:\.\d+)?)(?:%|\s*percent)/gi,
-    // Currency without units (e.g., "$50,000")
-    /\$\s*([\d,]+(?:\.\d+)?)/g,
-    // Plain numbers (e.g., "50000", "50,000")
-    /\b([\d,]+(?:\.\d+)?)\b/g
+    { regex: /([\d,]+(?:\.\d+)?)(?:%|\s*percent)/gi, multiplier: 1 },
+    
+    // Currency without units but with large amounts (e.g., "$50,000,000")
+    { regex: /\$\s*([\d,]+(?:\.\d+)?)/g, multiplier: 1 },
+    
+    // Plain large numbers (e.g., "50000000", "50,000,000") - only if > 1000
+    { regex: /\b([\d,]{4,}(?:\.\d+)?)\b/g, multiplier: 1 },
+    
+    // Any remaining numbers
+    { regex: /\b([\d,]+(?:\.\d+)?)\b/g, multiplier: 1 }
   ];
   
   for (const pattern of patterns) {
-    const matches = [...cleaned.matchAll(pattern)];
+    const matches = [...cleaned.matchAll(pattern.regex)];
     if (matches.length > 0) {
       let value = parseFloat(matches[0][1].replace(/,/g, ''));
-      const fullMatch = matches[0][0].toLowerCase();
       
-      // Apply multipliers
-      if (fullMatch.includes('million') || fullMatch.includes(' m')) {
-        value *= 1000000;
-      } else if (fullMatch.includes('billion') || fullMatch.includes(' b')) {
-        value *= 1000000000;
+      if (!isNaN(value)) {
+        const finalValue = value * pattern.multiplier;
+        console.log(`🔢 Found: "${matches[0][0]}" -> ${value} * ${pattern.multiplier} = ${finalValue}`);
+        return finalValue;
       }
-      
-      return !isNaN(value) ? value : null;
     }
   }
   
+  console.log(`❌ No valid number found in: "${cleaned}"`);
   return null;
 };
 
