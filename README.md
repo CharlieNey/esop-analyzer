@@ -17,10 +17,12 @@ A sophisticated AI-powered document analysis platform specifically designed for 
 - **Vector Similarity Search**: Semantic search using pgvector for relevant content retrieval
 
 ### 📊 Interactive Analytics Dashboard
-- **Advanced Visualizations**: Radar charts, waterfall charts, gauge charts, Sankey diagrams, sunburst charts
-- **Real-time Metrics Display**: Live updates during document processing
+- **Advanced Visualizations**: Linear trend charts, radar charts, waterfall charts, gauge charts, Sankey diagrams, sunburst charts
+- **Historical Data Analysis**: AI-powered extraction of multi-year financial trends and forecasting
+- **Intelligent Graph Caching**: 24-hour localStorage caching system for instant graph loading on revisits
+- **Real-time Metrics Display**: Live updates during document processing with loading indicators
 - **Data Quality Indicators**: Confidence scores and validation status for extracted metrics
-- **Export Capabilities**: PDF and image export functionality for reports
+- **Export Capabilities**: PDF and image export functionality for comprehensive reports
 
 ## 🏗️ Technical Architecture
 
@@ -92,10 +94,12 @@ A sophisticated AI-powered document analysis platform specifically designed for 
 ```
 
 **Interactive Dashboard Components:**
-- **Enhanced Metrics Dashboard**: Real-time financial metrics with confidence indicators
-- **Advanced Charts**: Radar charts for performance analysis, waterfall charts for value breakdown
+- **Advanced Metrics Dashboard**: Real-time financial metrics with confidence indicators and caching
+- **Historical Trend Analysis**: Linear trend charts with AI-extracted multi-year financial data
+- **Graph Caching System**: localStorage-based caching with 24-hour expiration and version control
+- **Performance Charts**: Radar charts for analysis, waterfall charts for value breakdown
 - **Data Quality Indicators**: Visual confidence scores and validation status
-- **Export System**: PDF generation and image capture for reporting
+- **Export System**: PDF generation and image capture for comprehensive reporting
 
 ## 🚀 Model Selection & AI Strategy
 
@@ -228,7 +232,9 @@ GET    /api/pdf/documents/:id  // Get specific document details
 POST   /api/questions/ask           // Intelligent Q&A with citations
 GET    /api/questions/history/:id   // Question/answer history
 GET    /api/metrics/:documentId     // Extract financial metrics
+GET    /api/metrics/enhanced/:id    // Enhanced metrics with historical data
 POST   /api/metrics/validate        // Manual metrics validation
+GET    /api/metrics/live/:id        // Live metrics streaming endpoint
 ```
 
 ### Image Processing Endpoints
@@ -248,6 +254,20 @@ The system extracts and validates:
 - **Capital Structure**: ESOP ownership percentages
 - **Discount Rates**: WACC, risk-free rates, market premiums
 
+### Historical Data Analysis & Trend Visualization
+- **Multi-Year Data Extraction**: AI-powered extraction of historical financial data (revenue, EBITDA, cash flow, growth rates, margins, debt coverage)
+- **Intelligent Trend Charts**: Linear trend charts with historical vs. projected data visualization
+- **Predictive Analytics**: Future trend projections based on historical patterns with clear distinction from actual data
+- **Comprehensive Metrics**: Revenue trends, EBITDA trends, per-share value history, cash flow analysis, growth rate tracking, profit margin analysis, debt coverage ratios
+- **Smart Fallback System**: Multiple AI query strategies to maximize historical data extraction success
+
+### Performance Optimization & Caching
+- **Graph Caching System**: Intelligent localStorage caching with 24-hour expiration
+- **Three-Layer Cache Strategy**: Enhanced metrics, AI fallback data, and processed trend data caching
+- **Version-Controlled Cache**: Automatic cache invalidation with version compatibility checks
+- **Cache Management UI**: Visual indicators and manual refresh capabilities for cache control
+- **Instant Loading**: Previously processed graphs load immediately on document revisits
+
 ### Intelligent Document Processing
 - **Multi-stage PDF extraction** with quality validation
 - **Content-aware chunking** preserving context boundaries
@@ -255,11 +275,14 @@ The system extracts and validates:
 - **Background processing** with progress indicators
 
 ### Advanced Visualizations
+- **Linear Trend Charts**: Historical financial trend analysis with projections
 - **Radar Charts**: Multi-dimensional performance analysis
 - **Waterfall Charts**: Value component breakdowns  
 - **Sankey Diagrams**: Capital flow visualization
 - **Gauge Charts**: Performance metrics with targets
 - **Sunburst Charts**: Hierarchical data representation
+- **Interactive Chart Navigation**: Dynamic chart selection with real-time data loading
+- **Cached Visualization Loading**: Instant chart rendering for previously analyzed documents
 
 ## 🔍 Quality Assurance & Validation
 
@@ -281,8 +304,10 @@ The system extracts and validates:
 - **Vector Indexing**: IVFFlat indexes for fast similarity search at scale
 - **Connection Pooling**: Efficient database connection management
 - **Async Processing**: Non-blocking operations for large document processing
-- **Caching Layer**: Intelligent caching of embeddings and frequently accessed data
+- **Multi-Layer Caching**: Intelligent caching of embeddings, chart data, and frequently accessed information
+- **Graph Caching**: localStorage-based visualization caching with 24-hour expiration
 - **Resource Management**: Memory optimization for large document processing
+- **Smart Data Loading**: Skip expensive API calls when cached data is available
 
 ### Monitoring & Analytics
 - **Processing Metrics**: Document processing times and success rates
