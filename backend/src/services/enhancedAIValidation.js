@@ -399,6 +399,12 @@ Respond with ONLY the number if found, or "NOT_FOUND" if no value exists for the
         return null;
       }
 
+      // Filter out obvious per-share values for equity metrics
+      if ((metricName === 'valueOfEquity' || metricName === 'enterpriseValue') && parsedValue < 1000) {
+        console.log(`⚠️ Filtered out likely per-share value for ${metricName}: ${parsedValue}`);
+        return null;
+      }
+
       // Assess date relevance from the response
       const dateRelevance = this.assessDateRelevance(response, valuationDate);
       
@@ -429,16 +435,20 @@ ${valuationDate ? `IMPORTANT: ONLY use values specifically labeled as "as of ${v
 
 Respond with ONLY the number, no explanation.`,
       
-      valueOfEquity: `Find the FINAL, CONCLUDED equity value ${valuationDate ? `as of ${valuationDate}` : 'for the valuation date'}. Look for:
+      valueOfEquity: `Find the FINAL, CONCLUDED TOTAL equity value ${valuationDate ? `as of ${valuationDate}` : 'for the valuation date'}. Look for:
       
-1. Executive Summary - equity value conclusion ${valuationDate ? `as of ${valuationDate}` : ''}
-2. "Fair Market Value of Equity" ${valuationDate ? `as of ${valuationDate}` : ''}
-3. Final concluded equity value (not historical or projected)
-4. Value available to shareholders on the valuation date
+1. Executive Summary - total equity value conclusion ${valuationDate ? `as of ${valuationDate}` : ''}
+2. "Fair Market Value of Equity" - TOTAL value ${valuationDate ? `as of ${valuationDate}` : ''}
+3. Final concluded total equity value (not historical or projected)
+4. Total value available to shareholders on the valuation date
 
 ${valuationDate ? `IMPORTANT: ONLY use values specifically for ${valuationDate}. Ignore values from prior years or projections.` : ''}
 
-Respond with ONLY the number, no explanation.`,
+CRITICAL: Look for TOTAL equity value (typically millions of dollars, like 25000000). 
+DO NOT use per-share values (typically small numbers like 3.04 or 125.50).
+If you see a per-share value, look for the total equity value instead.
+
+Respond with ONLY the total number (like 25000000), no explanation.`,
       
       revenue: `Find the company's annual revenue ${valuationDate ? `for the year closest to ${valuationDate}` : 'for the most recent complete year before valuation'}. Look in:
       
@@ -485,6 +495,12 @@ Respond with ONLY the percentage number, no explanation.`
         return null;
       }
 
+      // Filter out obvious per-share values for equity metrics
+      if ((metricName === 'valueOfEquity' || metricName === 'enterpriseValue') && parsedValue < 1000) {
+        console.log(`⚠️ Filtered out likely per-share value for ${metricName}: ${parsedValue}`);
+        return null;
+      }
+
       const dateRelevance = this.assessDateRelevance(response, valuationDate);
       
       return {
@@ -515,17 +531,21 @@ This should be the definitive answer to "What is this company worth in total?"
 
 Respond with ONLY the number (like 50000000), no explanation.`,
       
-      valueOfEquity: `Find the FINAL, CONCLUDED equity or shareholder value in this document. Look for:
+      valueOfEquity: `Find the FINAL, CONCLUDED TOTAL equity or shareholder value in this document. Look for:
       
-1. Executive Summary - equity value conclusion
-2. "Fair Market Value of Equity" sections
-3. Total shareholder value (not per-share)
-4. Value available to owners/shareholders
-5. Equity valuation summary
+1. Executive Summary - TOTAL equity value conclusion
+2. "Fair Market Value of Equity" sections - TOTAL value
+3. Total shareholder value (NOT per-share)
+4. Total value available to owners/shareholders
+5. Equity valuation summary - TOTAL amount
 
-This should be the definitive answer to "What is the equity worth in total?"
+This should be the definitive answer to "What is the equity worth in TOTAL?"
 
-Respond with ONLY the number (like 45000000), no explanation.`,
+CRITICAL: Look for TOTAL equity value (millions of dollars, like 22000000 or 45000000). 
+IGNORE per-share values (small numbers like 3.04, 125.50, etc).
+If you only see per-share values, respond with "NOT_FOUND".
+
+Respond with ONLY the total number (like 22000000), no explanation.`,
       
       revenue: `Find the company's most recent annual revenue/sales figure. Look in:
       
