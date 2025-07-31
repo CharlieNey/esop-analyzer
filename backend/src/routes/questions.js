@@ -60,10 +60,11 @@ router.post('/ask', async (req, res) => {
         
         // Lower threshold to 0.25 to catch more relevant chunks
         if (similarity > 0.25) {
+          const pageNumber = chunk.metadata?.pageNumber || 1;
           similarChunks.push({
             ...chunk,
             similarity,
-            pageNumber: chunk.metadata?.pageNumber || chunk.chunk_index + 1
+            pageNumber: pageNumber
           });
         }
       }
@@ -74,10 +75,11 @@ router.post('/ask', async (req, res) => {
         for (const chunk of chunks) {
           const chunkEmbedding = JSON.parse(chunk.embedding);
           const similarity = calculateCosineSimilarity(questionEmbedding, chunkEmbedding);
+          const pageNumber = chunk.metadata?.pageNumber || 1;
           similarChunks.push({
             ...chunk,
             similarity,
-            pageNumber: chunk.metadata?.pageNumber || chunk.chunk_index + 1
+            pageNumber: pageNumber
           });
         }
       }
@@ -171,7 +173,7 @@ ${context}`;
         
         // Take just the first chunk to stay within limits
         const fallbackChunk = chunks[0];
-        const fallbackPageNum = fallbackChunk.metadata?.pageNumber || fallbackChunk.chunk_index + 1;
+        const fallbackPageNum = fallbackChunk.metadata?.pageNumber || 1;
         const fallbackContext = `AVAILABLE PAGES: ${fallbackPageNum}
 
 === PAGE ${fallbackPageNum} (Relevance: 0.500) ===
@@ -184,9 +186,9 @@ ${fallbackChunk.chunk_text.substring(0, 8000)}
           chunkIndex: fallbackChunk.chunk_index,
           distance: 0.5,
           preview: fallbackChunk.chunk_text.substring(0, 200) + '...',
-          pageNumber: fallbackChunk.metadata?.pageNumber || fallbackChunk.chunk_index + 1,
+          pageNumber: fallbackPageNum,
           relevance: 0.5,
-          section: `Page ${fallbackChunk.metadata?.pageNumber || fallbackChunk.chunk_index + 1}`,
+          section: `Page ${fallbackPageNum}`,
           fullText: fallbackChunk.chunk_text
         }];
         
