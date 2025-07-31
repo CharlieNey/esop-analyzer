@@ -102,8 +102,8 @@ A  AI-powered document analysis platform specifically designed for ESOP (Employe
 - **Strengths**: better understanding of financial terminology and document structure
 
 **Anthropic Claude (Sonnet/Haiku)**
-- **Use Case**: Fallback processing and cross-validation
-- **Strengths**: Alternative reasoning approach for validation
+- **Use Case**: Also handels processing and cross-validation
+- **Strengths**: Alternative reasoning for reliability, Faster, Cheaper, but still strong at dealing with large documents and complex topics
 
 **Text Embedding Models**
 - **Primary**: `text-embedding-3-small` for faster, cost-effective semantic search
@@ -114,7 +114,6 @@ A  AI-powered document analysis platform specifically designed for ESOP (Employe
 ### Key Validation Improvements 
 - **Date Filtering**: Automatically extracts valuation dates and filters out historical/projected values
 - **Candidate Selection**: Collects multiple potential values and uses AI to choose the most reliable
-- **Per-Share Detection**: Filters out per-share values (like 3.04) when looking for total amounts (like 25M)
 
 ## Database Schema & Vector Search
 
@@ -216,9 +215,8 @@ The system extracts and validates:
 
 ### Error Handling & Recovery
 - **Graceful Degradation**: System continues functioning if components fail
-- **Automatic Retry Logic**: Failed operations retry with exponential backoff
-- **Comprehensive Logging**: Detailed audit trails for debugging and compliance
-- **Health Monitoring**: System health checks and performance metrics
+- **Automatic Retry Logic**: Failed operations retry automatically
+- **Comprehensive Logging**: audit trails for debugging and compliance
 
 ## 🚀 Performance & Scalability
 
