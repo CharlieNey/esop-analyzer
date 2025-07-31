@@ -217,7 +217,7 @@ END OF EXTRACTED TEXT
             chunkWithEmbedding.globalIndex,
             JSON.stringify(chunkWithEmbedding.embedding),
             JSON.stringify({
-              pageNumber: chunkWithEmbedding.pageNumber,
+              pageNumber: chunkWithEmbedding.pageNumber || 1,
               pageType: chunkWithEmbedding.type || 'chunk',
               chunkIndex: chunkWithEmbedding.chunkIndex,
               totalChunksInPage: chunkWithEmbedding.totalChunksInPage,
@@ -283,7 +283,7 @@ Location: Page ${table.page}`;
     chunks.push({
       text: tableText,
       type: 'table',
-      pageNumber: table.page,
+      pageNumber: table.page || 1,
       chunkIndex: index,
       elementId: table.id,
       metadata: {
@@ -319,7 +319,7 @@ Chart Type: ${chart.type}
     chunks.push({
       text: chartText,
       type: 'chart',
-      pageNumber: chart.page,
+      pageNumber: chart.page || 1,
       chunkIndex: index,
       elementId: chart.id,
       metadata: {
@@ -342,7 +342,7 @@ Location: Page ${image.page}`;
     chunks.push({
       text: imageText,
       type: 'image',
-      pageNumber: image.page,
+      pageNumber: image.page || 1,
       chunkIndex: index,
       elementId: image.id,
       metadata: {
@@ -363,7 +363,7 @@ const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap 
   if (pageContent.length <= maxChunkSize) {
     return [{
       text: pageContent,
-      pageNumber: pageNumber,
+      pageNumber: pageNumber || 1,
       chunkIndex: 0
     }];
   }
@@ -382,7 +382,7 @@ const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap 
       // Save current chunk
       chunks.push({
         text: currentChunk.trim(),
-        pageNumber: pageNumber,
+        pageNumber: pageNumber || 1,
         chunkIndex: chunkIndex
       });
       
@@ -400,7 +400,7 @@ const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap 
   if (currentChunk.trim().length > 0) {
     chunks.push({
       text: currentChunk.trim(),
-      pageNumber: pageNumber,
+      pageNumber: pageNumber || 1,
       chunkIndex: chunkIndex
     });
   }
@@ -409,7 +409,7 @@ const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap 
   if (chunks.length === 0) {
     chunks.push({
       text: pageContent,
-      pageNumber: pageNumber,
+      pageNumber: pageNumber || 1,
       chunkIndex: 0
     });
   }
@@ -731,7 +731,7 @@ const splitTextIntoPages = (text) => {
     pages = splitByLength(text, 2500); // ~2500 chars per page for better granularity
   }
   
-  // Convert to page objects
+  // Convert to page objects with proper page numbering
   return pages.map((pageContent, index) => ({
     pageNumber: index + 1,
     content: pageContent.trim()
