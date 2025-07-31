@@ -460,15 +460,20 @@ ${valuationDate ? `Use revenue from the year that ends closest to ${valuationDat
 
 Respond with ONLY the number, no explanation.`,
       
-      ebitda: `Find the company's EBITDA ${valuationDate ? `for the year closest to ${valuationDate}` : 'for the most recent complete year before valuation'}. Look for:
+      ebitda: `Find the company's BASE YEAR or HISTORICAL EBITDA ${valuationDate ? `for the most recent complete year before ${valuationDate}` : 'for the most recent complete year'}. Look for:
       
-1. Financial statements for the relevant year
-2. EBITDA used in the valuation analysis
-3. Adjusted EBITDA for the base year
+1. Historical financial statements (NOT projections)
+2. Base year EBITDA used as starting point for valuation
+3. Most recent actual/historical EBITDA (not forecasted)
+4. Last twelve months (LTM) EBITDA if available
 
-${valuationDate ? `Use EBITDA from the year that ends closest to ${valuationDate}. Do not use projected EBITDA.` : ''}
+${valuationDate ? `CRITICAL: Use actual historical EBITDA from the most recent complete year BEFORE ${valuationDate}. 
+IGNORE projected, forecasted, or estimated EBITDA for future periods.
+Look for terms like "base year", "historical", "actual", "LTM" (Last Twelve Months).` : ''}
 
-Respond with ONLY the number, no explanation.`,
+DO NOT use projected or forecasted EBITDA values.
+
+Respond with ONLY the historical number, no explanation.`,
       
       discountRate: `Find the discount rate used in this specific valuation ${valuationDate ? `as of ${valuationDate}` : ''}. Look in:
       
@@ -558,16 +563,19 @@ Use the most recent full year's data.
 
 Respond with ONLY the number, no explanation.`,
       
-      ebitda: `Find the company's EBITDA (Earnings Before Interest, Taxes, Depreciation, Amortization). Look for:
+      ebitda: `Find the company's BASE YEAR/HISTORICAL EBITDA (Earnings Before Interest, Taxes, Depreciation, Amortization). Look for:
       
-1. Financial statements
-2. "EBITDA" specifically mentioned
-3. "Adjusted EBITDA" 
-4. Operating income before depreciation
+1. Historical financial statements (NOT projections)
+2. "Base year EBITDA" or "Historical EBITDA"
+3. "Actual EBITDA" (not projected)
+4. Most recent completed year EBITDA
+5. LTM (Last Twelve Months) EBITDA
 
-Use the most recent year's figure.
+CRITICAL: Find the HISTORICAL/ACTUAL EBITDA used as the base for valuation.
+DO NOT use projected, forecasted, or estimated future EBITDA.
+Look for the starting point EBITDA that valuations are built from.
 
-Respond with ONLY the number, no explanation.`,
+Respond with ONLY the historical number, no explanation.`,
       
       discountRate: `Find the discount rate used in the valuation. Look in:
       
@@ -623,11 +631,23 @@ Respond with ONLY the percentage number (like 12.5), no explanation.`
     // Strong indicators of historical/projected data
     if (lowerResponse.includes('prior year') ||
         lowerResponse.includes('previous year') ||
-        lowerResponse.includes('historical') ||
         lowerResponse.includes('projected') ||
         lowerResponse.includes('forecast') ||
+        lowerResponse.includes('forecasted') ||
         lowerResponse.includes('estimated') ||
+        lowerResponse.includes('projection') ||
+        lowerResponse.includes('future') ||
+        lowerResponse.includes('expected') ||
         lowerResponse.match(/\b(20\d{2})\b/) && !lowerResponse.includes(valuationDate)) {
+      return 'historical_or_projected';
+    }
+    
+    // For financial metrics like EBITDA, be extra strict about projections
+    if ((lowerResponse.includes('ebitda') || lowerResponse.includes('revenue')) &&
+        (lowerResponse.includes('growth') ||
+         lowerResponse.includes('target') ||
+         lowerResponse.includes('plan') ||
+         lowerResponse.includes('budget'))) {
       return 'historical_or_projected';
     }
     
