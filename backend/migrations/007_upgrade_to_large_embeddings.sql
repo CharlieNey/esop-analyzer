@@ -15,10 +15,9 @@ CREATE TABLE document_chunks (
     metadata JSONB DEFAULT '{}'
 );
 
--- Recreate indexes (using hnsw for high-dimensional vectors)
-CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding 
-ON document_chunks USING hnsw (embedding vector_cosine_ops) 
-WITH (m = 16, ef_construction = 64);
+-- Note: Vector indexes limited to 2000 dimensions in pgvector
+-- Using exact search for 3072-dimensional embeddings
+-- CREATE INDEX would be added here when pgvector supports >2000 dimensions
 
 -- Add other indexes that were in the original schema
 CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id);
