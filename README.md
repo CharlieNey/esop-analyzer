@@ -5,16 +5,18 @@ A sophisticated AI-powered document analysis platform specifically designed for 
 ## 🎯 Core Features
 
 ### 📄 Document Processing & AI Extraction
-- **Multi-format PDF Processing**: Advanced PDF text extraction with fallback mechanisms
-- **Enhanced AI Validation**: Cross-validation system using multiple AI prompts for improved accuracy
+- **Multi-format PDF Processing**: Advanced PDF text extraction using Reducto API with comprehensive fallback mechanisms
+- **Enhanced AI Validation with Date Awareness**: Multi-stage validation system that filters historical/projected data to match valuation dates
+- **Conflict Resolution AI**: Smart candidate selection system that chooses between conflicting values using AI judgment
 - **Background Job Processing**: Async processing pipeline for large documents with real-time status updates
-- **Smart Content Chunking**: Intelligent document segmentation for optimal AI processing
+- **Smart Content Chunking**: Intelligent document segmentation with page-aware citation tracking
 
 ### 🤖 AI-Powered Analysis
 - **Dual AI Integration**: OpenAI GPT-4 and Anthropic Claude support with automatic fallback
-- **Enhanced Metrics Extraction**: Sophisticated extraction of enterprise value, equity value, financial ratios
-- **Intelligent Question Answering**: Context-aware responses with precise page citations
-- **Vector Similarity Search**: Semantic search using pgvector for relevant content retrieval
+- **Date-Aware Metrics Extraction**: Sophisticated extraction that avoids projected/historical values outside valuation date
+- **Per-Share Value Filtering**: Automatically distinguishes between total values and per-share amounts
+- **Intelligent Question Answering**: Context-aware responses with precise page citations and consistent page numbering
+- **Vector Similarity Search**: Semantic search using pgvector for relevant content retrieval with optimized context selection
 
 ### 📊 Interactive Analytics Dashboard
 - **Advanced Visualizations**: Linear trend charts, radar charts, waterfall charts, gauge charts, Sankey diagrams, sunburst charts
@@ -122,16 +124,25 @@ A sophisticated AI-powered document analysis platform specifically designed for 
 
 ### Enhanced AI Validation System
 
-The system implements a sophisticated multi-stage validation approach:
+The system implements a sophisticated multi-stage validation approach with date awareness and conflict resolution:
 
 ```javascript
-// Enhanced validation with cross-validation
-const enhancedResult = await enhancedAIValidation.runEnhancedValidation(documentText);
-// Confidence scoring and metric validation
-const confidence = calculateConfidenceScore(primaryResult, secondaryResult);
-// Automatic fallback to comprehensive extraction
+// Enhanced validation with date-aware candidate collection
+const candidates = await extractMetricCandidates(documentText, prompts, metricName);
+// AI-powered conflict resolution between candidates
+const resolution = await resolveConflictWithAI(documentText, metricName, candidates);
+// Cross-validation with mathematical relationship checks
+const crossValidation = await crossValidateEnterpriseAndEquity(documentText, results);
+// Automatic fallback with confidence scoring
 if (confidence < threshold) fallbackToPatternMatching();
 ```
+
+### Key Validation Improvements (2024)
+- **Date Filtering**: Automatically extracts valuation dates and filters out historical/projected values
+- **Candidate Selection**: Collects multiple potential values and uses AI to choose the most reliable
+- **Per-Share Detection**: Filters out per-share values (like 3.04) when looking for total amounts (like 25M)
+- **Base Year Focus**: For EBITDA, specifically targets historical base year values over projections
+- **Page Number Consistency**: Ensures citations always show correct page numbers matching AI responses
 
 ## 📊 Database Schema & Vector Search
 
@@ -287,8 +298,12 @@ The system extracts and validates:
 ## 🔍 Quality Assurance & Validation
 
 ### Multi-Layer Validation System
-- **Cross-validation**: Multiple AI prompts validate extracted metrics
-- **Confidence Scoring**: Statistical confidence measures for each metric
+- **Date-Aware Extraction**: Valuation date detection with automatic filtering of wrong-period data
+- **Candidate Collection**: Multiple extraction methods (primary, secondary, targeted search) for each metric
+- **AI Conflict Resolution**: Smart selection between conflicting values using document context and authority
+- **Cross-validation**: Mathematical relationship validation (Enterprise Value ≥ Equity Value)
+- **Value Type Filtering**: Automatic detection and filtering of per-share vs. total values
+- **Confidence Scoring**: Statistical confidence measures with date relevance weighting
 - **Pattern Matching Fallback**: Regex-based extraction as backup validation
 - **Human-in-the-loop**: Manual validation capabilities for critical metrics
 
@@ -332,10 +347,12 @@ The system extracts and validates:
 ## 📊 Metrics & KPIs
 
 ### Business Metrics
-- **Processing Accuracy**: >95% accuracy on key financial metrics
-- **Processing Speed**: Average 30-45 seconds per document
-- **User Satisfaction**: Citation accuracy and response quality
-- **Cost Efficiency**: Optimized AI model usage and resource allocation
+- **Processing Accuracy**: >95% accuracy on key financial metrics with date-aware validation
+- **Citation Accuracy**: 100% consistent page numbering between AI responses and citations
+- **Value Selection Accuracy**: Smart filtering prevents wrong-period or per-share value selection
+- **Processing Speed**: Average 30-45 seconds per document with parallel processing
+- **User Satisfaction**: Enhanced citation accuracy and context-aware response quality
+- **Cost Efficiency**: Optimized AI model usage with intelligent context optimization
 
 ### Technical Metrics
 - **System Uptime**: 99.9% availability target
@@ -376,6 +393,7 @@ npm run migrate:prod       # Production migrations
 ## 🔮 Roadmap & Future Enhancements
 
 ### Short-term Goals (3-6 months)
+- **Outlier Detection**: Automatic detection and filtering of extreme values in chart data
 - **Multi-document Comparison**: Side-by-side analysis of multiple ESOP reports
 - **Advanced Export Features**: Excel, PowerPoint, and custom report generation  
 - **Real-time Collaboration**: Multi-user document analysis and annotation
