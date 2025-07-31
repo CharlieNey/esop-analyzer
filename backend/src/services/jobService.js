@@ -33,7 +33,9 @@ class JobService {
   }
 
   async processJob(jobId) {
-    console.log(`🚀 Starting background processing for job ${jobId}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🚀 Starting background processing for job ${jobId}`);
+    }
     
     try {
       // Set global job ID for progress tracking
@@ -67,47 +69,65 @@ class JobService {
           
           try {
             // Step 1: Start with standard AI extraction as the base
-            console.log('🔍 Step 1: Running standard AI extraction as base...');
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔍 Step 1: Running standard AI extraction as base...');
+            }
             await this.updateJobStatus(jobId, 'processing', 'Running standard AI extraction...');
             const aiMetrics = await extractMetrics(document.rows[0].content_text);
             
             let baseMetrics = null;
             if (aiMetrics && this.hasValidMetrics(aiMetrics)) {
-              console.log('✅ Standard AI extraction successful');
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Standard AI extraction successful');
+              }
               baseMetrics = aiMetrics;
             } else {
-              console.log('⚠️ Standard AI extraction failed, trying comprehensive fallback...');
+              if (process.env.NODE_ENV === 'development') {
+                console.log('⚠️ Standard AI extraction failed, trying comprehensive fallback...');
+              }
               await this.updateJobStatus(jobId, 'processing', 'AI extraction failed, using comprehensive fallback patterns...');
               
               // Use comprehensive extraction as fallback
               const comprehensiveMetrics = extractComprehensiveMetrics(document.rows[0].content_text);
               
               if (comprehensiveMetrics && this.hasValidMetrics(comprehensiveMetrics)) {
-                console.log('✅ Comprehensive extraction successful');
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('✅ Comprehensive extraction successful');
+                }
                 baseMetrics = comprehensiveMetrics;
               } else {
-                console.log('⚠️ Standard and comprehensive extraction failed, creating base structure...');
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('⚠️ Standard and comprehensive extraction failed, creating base structure...');
+                }
                 baseMetrics = this.createEmptyMetricsStructure();
               }
             }
 
             // Step 2: Use enhanced AI validation to fill gaps and validate
-            console.log('🚀 Step 2: Using enhanced AI validation to fill gaps...');
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🚀 Step 2: Using enhanced AI validation to fill gaps...');
+            }
             await this.updateJobStatus(jobId, 'processing', 'Running enhanced AI validation to fill missing metrics...');
             
             try {
               const enhancedResult = await enhancedAIValidation.runEnhancedValidation(document.rows[0].content_text);
               
               if (enhancedResult && enhancedResult.metrics && this.hasValidEnhancedMetrics(enhancedResult.metrics)) {
-                console.log('✅ Enhanced AI validation successful');
-                console.log(`🎯 Confidence score: ${enhancedResult.confidence}%`);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('✅ Enhanced AI validation successful');
+                  console.log(`🎯 Confidence score: ${enhancedResult.confidence}%`);
+                }
                 
                 // MERGE enhanced metrics with base metrics (enhanced only replaces NULL values)
                 const enhancedStandard = this.convertEnhancedMetricsToStandard(enhancedResult.metrics);
                 finalMetrics = this.mergeMetricsIntelligently(baseMetrics, enhancedStandard);
-                console.log('🔄 Merged enhanced validation with base metrics');
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔄 Merged enhanced validation with base metrics');
+                }
               } else {
-                console.log('⚠️ Enhanced AI validation incomplete, using base metrics');
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('⚠️ Enhanced AI validation incomplete, using base metrics');
+                }
                 finalMetrics = baseMetrics;
               }
             } catch (enhancedError) {
@@ -123,7 +143,9 @@ class JobService {
                   [pdfResult.documentId, metricType, metricData]
                 );
               }
-              console.log(`📊 Stored ${Object.keys(finalMetrics).length} metric types for document ${pdfResult.documentId}`);
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`📊 Stored ${Object.keys(finalMetrics).length} metric types for document ${pdfResult.documentId}`);
+              }
             }
             
           } catch (metricsError) {
@@ -143,13 +165,17 @@ class JobService {
       }
 
       // Skip automatic AI validation since we already did comprehensive extraction and enhanced validation
-      console.log(`📊 Metrics extraction completed for document ${pdfResult.documentId}`);
-      console.log('ℹ️ Skipping redundant AI validation - already completed comprehensive extraction')
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📊 Metrics extraction completed for document ${pdfResult.documentId}`);
+        console.log('ℹ️ Skipping redundant AI validation - already completed comprehensive extraction')
+      }
 
       // Complete the job
       await this.updateJobStatus(jobId, 'completed', 'Processing completed successfully!', pdfResult.documentId);
       
-      console.log(`✅ Job ${jobId} completed successfully`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Job ${jobId} completed successfully`);
+      }
       
       return pdfResult;
       
@@ -282,7 +308,9 @@ class JobService {
   // Intelligently merge enhanced metrics with base metrics
   // Enhanced metrics ALWAYS replace base metrics when enhanced values are not null/undefined
   mergeMetricsIntelligently(baseMetrics, enhancedMetrics) {
-    console.log('🔄 Merging enhanced metrics with base metrics (enhanced takes priority)...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔄 Merging enhanced metrics with base metrics (enhanced takes priority)...');
+    }
     
     const merged = JSON.parse(JSON.stringify(baseMetrics)); // Deep clone
     
@@ -303,10 +331,14 @@ class JobService {
           const shouldUseEnhanced = (enhancedValue !== null && enhancedValue !== undefined);
           
           if (shouldUseEnhanced) {
-            console.log(`  ✅ Using enhanced ${fullPath}: ${baseValue} → ${enhancedValue}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`  ✅ Using enhanced ${fullPath}: ${baseValue} → ${enhancedValue}`);
+            }
             baseObj[key] = enhancedValue;
           } else if (baseValue !== null && baseValue !== undefined) {
-            console.log(`  ⚪ Kept base ${fullPath}: ${baseValue} (enhanced was null/undefined)`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`  ⚪ Kept base ${fullPath}: ${baseValue} (enhanced was null/undefined)`);
+            }
           }
         }
       }
@@ -386,9 +418,15 @@ class JobService {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        `DELETE FROM processing_jobs WHERE created_at < NOW() - INTERVAL '${olderThanDays} days'`
+        'DELETE FROM processing_jobs WHERE created_at < NOW() - INTERVAL \'$1 days\'',
+        [olderThanDays]
       );
-      console.log(`Cleaned up ${result.rowCount} old processing jobs`);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Cleaned up ${result.rowCount} old processing jobs`);
+      }
+      
+      return result.rowCount;
     } finally {
       client.release();
     }

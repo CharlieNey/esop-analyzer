@@ -18,7 +18,9 @@ export const processPDF = async (filePath, filename) => {
     
     try {
       // Use Reducto for PDF processing
-      console.log('🔄 Processing PDF with Reducto...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 Processing PDF with Reducto...');
+      }
       
       // Step 1: Upload file to Reducto
       const fileStream = fsSync.createReadStream(filePath);
@@ -26,45 +28,52 @@ export const processPDF = async (filePath, filename) => {
         file: fileStream
       });
       
-      console.log(`📁 File uploaded to Reducto: ${uploadResponse.file_id}`);
-      
       // Step 2: Parse the uploaded file with basic extraction (enhanced params cause API errors)
       const parseResponse = await reducto.parse.run({
         document_url: uploadResponse.file_id
       });
-      
-      console.log(`📄 Reducto parsing completed`);
       
       // Extract page-by-page content and visual elements from Reducto's structured output
       const extractionResult = extractContentFromReductoResult(parseResponse);
       pageData = extractionResult.pages;
       visualElements = extractionResult.visualElements;
       parseMethod = 'reducto';
-      console.log(`✅ Successfully extracted ${pageData.length} pages from PDF using Reducto`);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Successfully extracted ${pageData.length} pages from PDF using Reducto`);
+      }
       
       // If Reducto only found 1 page but content is large, try intelligent splitting
       if (pageData.length === 1 && pageData[0].content.length > 2000) {
-        console.log(`📄 Reducto found only 1 page but content is large (${pageData[0].content.length} chars), attempting intelligent splitting`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`📄 Reducto found only 1 page but content is large (${pageData[0].content.length} chars), attempting intelligent splitting`);
+        }
         const splitPages = splitTextIntoPages(pageData[0].content);
         if (splitPages.length > 1) {
           pageData = splitPages;
           parseMethod = 'reducto-with-splitting';
-          console.log(`✅ Split into ${pageData.length} logical pages`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Split into ${pageData.length} logical pages`);
+          }
         }
       }
       
     } catch (reductoError) {
-      console.log('Reducto parsing failed:', reductoError.message);
+      console.error('Reducto parsing failed:', reductoError.message);
       
       // Try basic PDF text extraction as fallback
       try {
-        console.log('🔄 Attempting basic PDF text extraction...');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 Attempting basic PDF text extraction...');
+        }
         const dataBuffer = await fs.readFile(filePath);
         pageData = await extractBasicPdfTextByPage(dataBuffer);
         parseMethod = 'basic-extraction';
-        console.log(`✅ Basic extraction successful: ${pageData.length} pages`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Basic extraction successful: ${pageData.length} pages`);
+        }
       } catch (basicError) {
-        console.log('Basic extraction failed:', basicError.message);
+        console.error('Basic extraction failed:', basicError.message);
         
         // Final fallback to mock content with multiple page structure
         const baseContent = filename.includes('second') || filename.includes('innovate') ? 
@@ -73,7 +82,7 @@ export const processPDF = async (filePath, filename) => {
         
         pageData = splitTextIntoPages(baseContent);
         parseMethod = 'fallback-mock';
-        console.log(`⚠️ Using fallback mock content for ${filename}`);
+        console.warn(`⚠️ Using fallback mock content for ${filename}`);
       }
     }
     
@@ -101,7 +110,7 @@ END OF EXTRACTED TEXT
         await fs.writeFile(debugFilePath, debugContent);
         console.log(`📝 Debug file created: ${debugFilePath}`);
       } catch (debugError) {
-        console.log('Failed to create debug file:', debugError.message);
+        console.error('Failed to create debug file:', debugError.message);
       }
     }
     
@@ -126,7 +135,9 @@ END OF EXTRACTED TEXT
       // Add visual content chunks first (if available)
       if (visualElements && (visualElements.tables.length > 0 || visualElements.charts.length > 0 || visualElements.images.length > 0)) {
         const visualChunks = createVisualChunks(visualElements);
-        console.log(`🎯 Created ${visualChunks.length} visual content chunks (${visualElements.tables.length} tables, ${visualElements.charts.length} charts, ${visualElements.images.length} images)`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🎯 Created ${visualChunks.length} visual content chunks (${visualElements.tables.length} tables, ${visualElements.charts.length} charts, ${visualElements.images.length} images)`);
+        }
         
         for (const chunk of visualChunks) {
           allChunks.push({
@@ -142,7 +153,9 @@ END OF EXTRACTED TEXT
       for (let i = 0; i < pageData.length; i++) {
         const page = pageData[i];
         const pageChunks = chunkPageContent(page.content, page.pageNumber);
-        console.log(`📄 Page ${page.pageNumber}: ${page.content.length} chars → ${pageChunks.length} text chunks`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`📄 Page ${page.pageNumber}: ${page.content.length} chars → ${pageChunks.length} text chunks`);
+        }
         
         for (const chunk of pageChunks) {
           allChunks.push({
@@ -155,7 +168,9 @@ END OF EXTRACTED TEXT
         }
       }
       
-      console.log(`🚀 Creating ${allChunks.length} embeddings in parallel...`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🚀 Creating ${allChunks.length} embeddings in parallel...`);
+      }
       const startTime = Date.now();
       
       // Report progress to job service if available
@@ -182,11 +197,13 @@ END OF EXTRACTED TEXT
           try {
             const embedding = await createEmbedding(chunk.text);
             const completed = i + batchIndex + 1;
-            console.log(`✅ Created embedding for page ${chunk.pageNumber} chunk ${chunk.chunkIndex} (${completed}/${allChunks.length})`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Created embedding for page ${chunk.pageNumber} chunk ${chunk.chunkIndex} (${completed}/${allChunks.length})`);
+            }
             reportProgress(completed, allChunks.length, 'Creating embeddings');
             return { ...chunk, embedding, success: true };
           } catch (embeddingError) {
-            console.log(`⚠️ Embedding failed for chunk ${i + batchIndex + 1}, using mock`);
+            console.error(`⚠️ Embedding failed for chunk ${i + batchIndex + 1}, using mock`);
             const mockEmbedding = Array(1536).fill(0).map(() => Math.random() - 0.5);
             const completed = i + batchIndex + 1;
             reportProgress(completed, allChunks.length, 'Creating embeddings');
@@ -199,10 +216,14 @@ END OF EXTRACTED TEXT
       }
       
       const embeddingTime = Date.now() - startTime;
-      console.log(`⚡ Created ${allChunks.length} embeddings in ${embeddingTime}ms (${Math.round(embeddingTime/allChunks.length)}ms per embedding)`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⚡ Created ${allChunks.length} embeddings in ${embeddingTime}ms (${Math.round(embeddingTime/allChunks.length)}ms per embedding)`);
+      }
       
       // Batch insert all chunks at once using multi-row insert
-      console.log(`💾 Batch inserting ${embeddingPromises.length} chunks into database...`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`💾 Batch inserting ${embeddingPromises.length} chunks into database...`);
+      }
       const insertStartTime = Date.now();
       
       if (embeddingPromises.length > 0) {
@@ -240,7 +261,9 @@ END OF EXTRACTED TEXT
       }
       
       const insertTime = Date.now() - insertStartTime;
-      console.log(`⚡ Batch database insert completed in ${insertTime}ms`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⚡ Batch database insert completed in ${insertTime}ms`);
+      }
       
       await client.query('COMMIT');
       

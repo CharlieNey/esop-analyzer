@@ -35,189 +35,137 @@ router.post('/ask', async (req, res) => {
       return res.status(400).json({ error: 'Question and documentId are required' });
     }
     
-    // Get document chunks with page metadata
-    const client = await pool.connect();
-    try {
-      const chunksResult = await client.query(
-        'SELECT chunk_text, chunk_index, embedding, metadata FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index',
-        [documentId]
-      );
-      
-      const chunks = chunksResult.rows;
-      
-      if (chunks.length === 0) {
-        return res.status(404).json({ error: 'Document not found or no chunks available' });
-      }
-      
-      // Create embeddings for the question
-      const questionEmbedding = await createEmbedding(question);
-      
-      // Find similar chunks using vector similarity with lower threshold
-      const similarChunks = [];
-      for (const chunk of chunks) {
-        const chunkEmbedding = JSON.parse(chunk.embedding);
-        const similarity = calculateCosineSimilarity(questionEmbedding, chunkEmbedding);
-        
-        // Lower threshold to 0.25 to catch more relevant chunks
-        if (similarity > 0.25) {
-          const pageNumber = chunk.metadata?.pageNumber || 1;
-          similarChunks.push({
-            ...chunk,
-            similarity,
-            pageNumber: pageNumber
-          });
-        }
-      }
-      
-      // If no chunks meet threshold, include all chunks with their similarity scores
-      if (similarChunks.length === 0) {
+    // Get similar chunks using vector similarity search
+    const similarChunks = await getSimilarChunks(question, documentId, 10);
+    
+    if (similarChunks.length === 0) {
+      return res.status(404).json({ error: 'No relevant content found for this question' });
+    }
+    
+    // Filter chunks by similarity threshold and get top chunks
+    const similarityThreshold = 0.7;
+    const topChunks = similarChunks.filter(chunk => chunk.similarity > similarityThreshold);
+    
+    if (topChunks.length === 0) {
+      if (process.env.NODE_ENV === 'development') {
         console.log('⚠️ No chunks met similarity threshold, including all chunks');
-        for (const chunk of chunks) {
-          const chunkEmbedding = JSON.parse(chunk.embedding);
-          const similarity = calculateCosineSimilarity(questionEmbedding, chunkEmbedding);
-          const pageNumber = chunk.metadata?.pageNumber || 1;
-          similarChunks.push({
-            ...chunk,
-            similarity,
-            pageNumber: pageNumber
-          });
-        }
       }
-      
-      // Sort by similarity and take top chunks, ensuring page diversity
-      similarChunks.sort((a, b) => b.similarity - a.similarity);
-      
-      // Select chunks with page diversity - prefer different pages
-      const topChunks = [];
-      const usedPages = new Set();
-      const maxChunksPerPage = 2;
-      const pageChunkCount = new Map();
-      
-      for (const chunk of similarChunks) {
-        const pageCount = pageChunkCount.get(chunk.pageNumber) || 0;
-        
-        if (topChunks.length < 7 && pageCount < maxChunksPerPage) {
-          topChunks.push(chunk);
-          pageChunkCount.set(chunk.pageNumber, pageCount + 1);
-          usedPages.add(chunk.pageNumber);
-        }
-        
-        if (topChunks.length >= 7) break;
+      // If no chunks meet threshold, use all chunks but limit to top 5
+      topChunks.push(...similarChunks.slice(0, 5));
+    }
+    
+    // Limit to top 5 chunks to avoid context overflow
+    const selectedChunks = topChunks.slice(0, 5);
+    
+    // Track which pages are being used for citations
+    const usedPages = new Set();
+    selectedChunks.forEach(chunk => {
+      if (chunk.pageNumber) {
+        usedPages.add(chunk.pageNumber);
       }
-      
-      // Add debug logging with page distribution
+    });
+    
+    if (process.env.NODE_ENV === 'development') {
       console.log(`🔍 Question: "${question}"`);
       console.log(`📄 Found ${similarChunks.length} similar chunks, using top ${topChunks.length}`);
       console.log(`📊 Top chunk similarity: ${topChunks[0]?.similarity?.toFixed(3)}`);
       console.log(`📋 Pages used: ${Array.from(usedPages).sort().join(', ')}`);
+    }
+    
+    // Build context from selected chunks
+    let context = '';
+    let contextTokens = 0;
+    
+    for (const chunk of selectedChunks) {
+      const chunkText = `PAGE ${chunk.pageNumber || 'Unknown'}: ${chunk.text}\n\n`;
+      const estimatedTokens = Math.ceil(chunkText.length / 4);
       
-      // Smart context preparation with token limit management
-      const maxContextTokens = 16000; // Increased limit for better coverage
-      let contextTokens = 0;
-      const selectedChunks = [];
+      // Limit context to ~8000 tokens to leave room for question and response
+      if (contextTokens + estimatedTokens > 8000) {
+        break;
+      }
       
-      for (const chunk of topChunks) {
-        // Estimate tokens (roughly 4 characters per token)
-        const chunkTokens = Math.ceil(chunk.chunk_text.length / 4);
-        const chunkContextTokens = chunkTokens + 50; // Add overhead for formatting
+      context += chunkText;
+      contextTokens += estimatedTokens;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(` Using ${selectedChunks.length} chunks, estimated ${contextTokens} tokens`);
+    }
+    
+    // If context is too small, include more content
+    if (contextTokens < 1000 && similarChunks.length > selectedChunks.length) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️ Low similarity detected, including limited document content');
+      }
+      
+      // Add more chunks with lower similarity
+      const additionalChunks = similarChunks.slice(selectedChunks.length, selectedChunks.length + 3);
+      for (const chunk of additionalChunks) {
+        const chunkText = `PAGE ${chunk.pageNumber || 'Unknown'}: ${chunk.text}\n\n`;
+        const estimatedTokens = Math.ceil(chunkText.length / 4);
         
-        if (contextTokens + chunkContextTokens <= maxContextTokens) {
-          selectedChunks.push(chunk);
-          contextTokens += chunkContextTokens;
-        } else {
-          // If this chunk would exceed limit, try to include a truncated version
-          const remainingTokens = maxContextTokens - contextTokens;
-          if (remainingTokens > 500) { // Only if we have meaningful space left
-            const truncatedText = chunk.chunk_text.substring(0, remainingTokens * 4);
-            selectedChunks.push({
-              ...chunk,
-              chunk_text: truncatedText + '...',
-              truncated: true
-            });
-          }
+        if (contextTokens + estimatedTokens > 12000) {
           break;
         }
-      }
-      
-      console.log(` Using ${selectedChunks.length} chunks, estimated ${contextTokens} tokens`);
-      
-      // Prepare context for OpenAI with token-aware structure, grouped by page
-      const pageGroups = {};
-      selectedChunks.forEach(chunk => {
-        if (!pageGroups[chunk.pageNumber]) {
-          pageGroups[chunk.pageNumber] = [];
+        
+        context += chunkText;
+        contextTokens += estimatedTokens;
+        if (chunk.pageNumber) {
+          usedPages.add(chunk.pageNumber);
         }
-        pageGroups[chunk.pageNumber].push(chunk);
-      });
-      
-      const context = Object.keys(pageGroups)
-        .sort((a, b) => parseInt(a) - parseInt(b))
-        .map(pageNum => {
-          const chunks = pageGroups[pageNum];
-          const chunkContents = chunks.map(chunk => chunk.chunk_text).join('\n\n');
-          const avgSimilarity = chunks.reduce((sum, chunk) => sum + chunk.similarity, 0) / chunks.length;
-          return `=== PAGE ${pageNum} (Relevance: ${avgSimilarity.toFixed(3)}) ===
+      }
+    }
+    
+    // Prepare context for OpenAI with token-aware structure, grouped by page
+    const pageGroups = {};
+    selectedChunks.forEach(chunk => {
+      if (!pageGroups[chunk.pageNumber]) {
+        pageGroups[chunk.pageNumber] = [];
+      }
+      pageGroups[chunk.pageNumber].push(chunk);
+    });
+    
+    const contextWithSummary = Object.keys(pageGroups)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .map(pageNum => {
+        const chunks = pageGroups[pageNum];
+        const chunkContents = chunks.map(chunk => chunk.text).join('\n\n');
+        const avgSimilarity = chunks.reduce((sum, chunk) => sum + chunk.similarity, 0) / chunks.length;
+        return `=== PAGE ${pageNum} (Relevance: ${avgSimilarity.toFixed(3)}) ===
 ${chunkContents}
 === END OF PAGE ${pageNum} ===`;
-        }).join('\n\n');
-        
-      // Add page summary at the top for AI reference
-      const pageList = Object.keys(pageGroups).sort((a, b) => parseInt(a) - parseInt(b));
-      const contextWithSummary = `AVAILABLE PAGES: ${pageList.join(', ')}
-
-${context}`;
+      }).join('\n\n');
       
-      // Add fallback context if we have very low similarity and no chunks selected
-      if (selectedChunks.length === 0 && topChunks[0]?.similarity < 0.4) {
+    // Add page summary at the top for AI reference
+    const pageList = Object.keys(pageGroups).sort((a, b) => parseInt(a) - parseInt(b));
+    
+    // Add fallback context if we have very low similarity and no chunks selected
+    if (selectedChunks.length === 0 && topChunks[0]?.similarity < 0.4) {
+      if (process.env.NODE_ENV === 'development') {
         console.log('⚠️ Low similarity detected, including limited document content');
-        
-        // Take just the first chunk to stay within limits
-        const fallbackChunk = chunks[0];
-        const fallbackPageNum = fallbackChunk.metadata?.pageNumber || 1;
-        const fallbackContext = `AVAILABLE PAGES: ${fallbackPageNum}
-
-=== PAGE ${fallbackPageNum} (Relevance: 0.500) ===
-${fallbackChunk.chunk_text.substring(0, 8000)}
-=== END OF PAGE ${fallbackPageNum} ===`; // Limit to ~2000 tokens
-        
-        const answer = await answerQuestion(question, fallbackContext, documentId);
-        
-        const citations = [{
-          chunkIndex: fallbackChunk.chunk_index,
-          distance: 0.5,
-          preview: fallbackChunk.chunk_text.substring(0, 200) + '...',
-          pageNumber: fallbackPageNum,
-          relevance: 0.5,
-          section: `Page ${fallbackPageNum}`,
-          fullText: fallbackChunk.chunk_text
-        }];
-        
-        res.json({
-          question,
-          answer,
-          citations,
-          documentId
-        });
-        return;
       }
       
-      // Get answer from OpenAI
-      let answer = await answerQuestion(question, contextWithSummary, documentId);
+      // Take just the first chunk to stay within limits
+      const fallbackChunk = chunks[0];
+      const fallbackPageNum = fallbackChunk.pageNumber || 1;
+      const fallbackContext = `AVAILABLE PAGES: ${fallbackPageNum}
+
+=== PAGE ${fallbackPageNum} (Relevance: 0.500) ===
+${fallbackChunk.text.substring(0, 8000)}
+=== END OF PAGE ${fallbackPageNum} ===`; // Limit to ~2000 tokens
       
-      // Validate that answer contains page references - if not, add them
-      answer = ensurePageReferences(answer, pageList);
+      const answer = await answerQuestion(question, fallbackContext, documentId);
       
-      // Prepare citations with page numbers
-      const citations = selectedChunks.map(chunk => ({
-        chunkIndex: chunk.chunk_index,
-        distance: 1 - chunk.similarity,
-        preview: chunk.chunk_text.substring(0, 200) + '...',
-        pageNumber: chunk.pageNumber,
-        relevance: chunk.similarity,
-        section: `Page ${chunk.pageNumber}`,
-        fullText: chunk.chunk_text,
-        truncated: chunk.truncated || false
-      }));
+      const citations = [{
+        chunkIndex: fallbackChunk.chunk_index,
+        distance: 0.5,
+        preview: fallbackChunk.text.substring(0, 200) + '...',
+        pageNumber: fallbackPageNum,
+        relevance: 0.5,
+        section: `Page ${fallbackPageNum}`,
+        fullText: fallbackChunk.text
+      }];
       
       res.json({
         question,
@@ -225,10 +173,33 @@ ${fallbackChunk.chunk_text.substring(0, 8000)}
         citations,
         documentId
       });
-      
-    } finally {
-      client.release();
+      return;
     }
+    
+    // Get answer from OpenAI
+    let answer = await answerQuestion(question, contextWithSummary, documentId);
+    
+    // Validate that answer contains page references - if not, add them
+    answer = ensurePageReferences(answer, pageList);
+    
+    // Prepare citations with page numbers
+    const citations = selectedChunks.map(chunk => ({
+      chunkIndex: chunk.chunk_index,
+      distance: 1 - chunk.similarity,
+      preview: chunk.text.substring(0, 200) + '...',
+      pageNumber: chunk.pageNumber,
+      relevance: chunk.similarity,
+      section: `Page ${chunk.pageNumber}`,
+      fullText: chunk.text,
+      truncated: chunk.truncated || false
+    }));
+    
+    res.json({
+      question,
+      answer,
+      citations,
+      documentId
+    });
     
   } catch (error) {
     console.error('Question answering error:', error);

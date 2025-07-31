@@ -25,125 +25,75 @@ export const createEmbedding = async (text) => {
 
 export const answerQuestion = async (question, context, documentId = null) => {
   try {
-    
-    // Estimate total tokens
+    // Estimate token usage
     const questionTokens = Math.ceil(question.length / 4);
     const contextTokens = Math.ceil(context.length / 4);
-    const systemPromptTokens = 500; // Approximate
-    const totalTokens = questionTokens + contextTokens + systemPromptTokens;
+    const totalTokens = questionTokens + contextTokens;
     
     if (process.env.NODE_ENV === 'development') {
       console.log(`📊 Token estimation: Question=${questionTokens}, Context=${contextTokens}, Total=${totalTokens}`);
     }
     
-    // If context is too large, truncate it more intelligently
+    // Truncate context if too large
     let finalContext = context;
-    if (totalTokens > 20000) { // Increased limit for better coverage
+    if (totalTokens > 12000) {
       if (process.env.NODE_ENV === 'development') {
         console.log('⚠️ Context too large, truncating...');
       }
-      const maxContextLength = (20000 - questionTokens - systemPromptTokens) * 4;
-      
-      // Try to preserve complete pages instead of cutting mid-sentence
-      const pages = context.split(/PAGE \d+/);
-      let truncatedContext = '';
-      let currentLength = 0;
-      
-      for (let i = 0; i < pages.length && currentLength < maxContextLength; i++) {
-        const pageContent = i === 0 ? pages[i] : 'PAGE ' + (i) + pages[i];
-        if (currentLength + pageContent.length <= maxContextLength) {
-          truncatedContext += pageContent;
-          currentLength += pageContent.length;
-        } else {
-          break;
-        }
+      finalContext = chunkText(context, 8000); // Leave room for question
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`📊 Truncated context to ${Math.ceil(finalContext.length / 4)} tokens`);
       }
-      
-      finalContext = truncatedContext || context.substring(0, maxContextLength);
-      if (finalContext.length < context.length) {
-        finalContext += '\n\n[Note: Content truncated to fit context limits]';
-      }
-      console.log(`📊 Truncated context to ${Math.ceil(finalContext.length / 4)} tokens`);
     }
     
-    const systemPrompt = `You are an expert financial analyst specializing in ESOP (Employee Stock Ownership Plan) valuation reports. 
-
-VISUAL CONTENT HANDLING:
-- When you see "TABLE X:" interpret and analyze the tabular data thoroughly
-- When you see "CHART X:" describe the visualization and extract key insights
-- When you see "IMAGE X:" reference any relevant visual information
-- Always reference both text content AND visual elements in your analysis
-- For financial data, prioritize table values and chart data over narrative text
-- When citing tables or charts, mention both the element type AND page number
-
-CRITICAL CITATION REQUIREMENTS:
-- You MUST explicitly mention page numbers in your answer (e.g., "According to Page 2..." or "Table 1 on Page 2 shows...")
-- Every factual claim MUST reference the specific page where that information appears
-- Use the exact page numbers shown in the document content below (PAGE 1, PAGE 2, etc.)
-- When referencing visual elements, specify the element type (e.g., "Table 1 on Page 2", "Chart 2 on Page 3")
-- If information spans multiple pages, mention all relevant page numbers
-
-IMPORTANT: You MUST answer based ONLY on the document content provided below. If the information is not in the provided content, say "I cannot find that specific information in the provided document content" rather than making assumptions.
-
-When answering:
-1. Start each key point with a page reference (e.g., "Table 1 on Page 3 indicates that...")
-2. Use ONLY the information from the provided document pages and visual elements
-3. Be specific and cite page numbers AND element types for EVERY piece of information
-4. If asked about something not in the content, clearly state it's not available
-5. For financial figures, be precise with numbers, currency, AND source (table/chart/page)
-6. Explain complex financial concepts in clear terms with page and element citations
-7. When analyzing tables, reference specific rows/columns if helpful
-8. When describing charts, mention the chart type and key data points
-9. Base your answers ONLY on the document text content provided - do not reference any dashboard metrics or extracted data
-
-Document Content:
-${finalContext}
-
-REMEMBER: Your answer must explicitly reference the page numbers AND visual elements that appear in the document content above. The user will see these same references in the citations, so they must match your analysis.`;
-
-    // Use GPT-4o for faster processing
-    const chatModel = process.env.CHAT_MODEL || 'gpt-4o';
-    let response;
+    const chatModel = getOptimalModel(finalContext.length);
+    
     try {
-      response = await openai.chat.completions.create({
+      const response = await openai.chat.completions.create({
         model: chatModel,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
+          { role: 'user', content: `Context:\n${finalContext}\n\nQuestion: ${question}` }
         ],
-        temperature: 0.3,
-        max_tokens: 1500, // Reduced for faster responses
-      });
-      console.log(`✅ Used ${chatModel} for question answering`);
-    } catch (modelError) {
-      console.log(`⚠️ ${chatModel} failed, trying GPT-3.5-turbo fallback`);
-      response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question }
-        ],
-        temperature: 0.3,
+        temperature: 0.1,
         max_tokens: 1000,
       });
+      
+      const answer = response.choices[0].message.content.trim();
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Used ${chatModel} for question answering`);
+      }
+      
+      return answer;
+      
+    } catch (gptError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`⚠️ ${chatModel} failed, trying GPT-3.5-turbo fallback`);
+      }
+      
+      // Try Claude as fallback before mock answer
+      try {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 Trying Claude fallback for question answering...');
+        }
+        const { answerQuestionWithClaude } = await import('./anthropicService.js');
+        const claudeAnswer = await answerQuestionWithClaude(question, finalContext);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Question answered with Claude fallback');
+        }
+        return claudeAnswer;
+      } catch (claudeError) {
+        console.error('Claude fallback also failed:', claudeError);
+        
+        // Final fallback to mock answer
+        return generateMockAnswer(question, finalContext);
+      }
     }
-
-    return response.choices[0].message.content;
+    
   } catch (error) {
     console.error('OpenAI question answering error:', error);
-    
-    // Try Claude as fallback before mock answer
-    try {
-      console.log('🔄 Trying Claude fallback for question answering...');
-      const { answerQuestionWithClaude } = await import('./anthropicService.js');
-      const claudeAnswer = await answerQuestionWithClaude(question, finalContext);
-      console.log('✅ Question answered with Claude fallback');
-      return claudeAnswer;
-    } catch (claudeError) {
-      console.error('Claude fallback also failed:', claudeError);
-      // Final fallback to mock answer
-      return generateMockAnswer(question, context);
-    }
+    return generateMockAnswer(question, context);
   }
 };
 
@@ -413,11 +363,15 @@ export const extractMetrics = async (documentText) => {
         // Try Claude first for better accuracy and speed
         const { extractMetricsWithClaude } = await import('./anthropicService.js');
         const pageResult = await extractMetricsWithClaude(page);
-        console.log(`✅ Page ${pageIndex + 1} processed with Claude`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Page ${pageIndex + 1} processed with Claude`);
+        }
         return { success: true, result: pageResult, pageIndex };
         
       } catch (claudeError) {
-        console.log(`⚠️ Page ${pageIndex + 1} failed with Claude:`, claudeError.message);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`⚠️ Page ${pageIndex + 1} failed with Claude:`, claudeError.message);
+        }
         
         // Fallback to OpenAI GPT-4-turbo
         try {
@@ -433,11 +387,15 @@ export const extractMetrics = async (documentText) => {
           
           const responseContent = response.choices[0].message.content.trim();
           const pageResult = parseJSONResponse(responseContent);
-          console.log(`✅ Page ${pageIndex + 1} processed with ${chatModel} fallback`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Page ${pageIndex + 1} processed with ${chatModel} fallback`);
+          }
           return { success: true, result: pageResult, pageIndex };
           
         } catch (gptError) {
-          console.log(`⚠️ Page ${pageIndex + 1} failed with ${chatModel}:`, gptError.message);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`⚠️ Page ${pageIndex + 1} failed with ${chatModel}:`, gptError.message);
+          }
           
           // Final fallback to GPT-3.5-turbo
           try {
@@ -453,11 +411,13 @@ export const extractMetrics = async (documentText) => {
             
             const responseContent = response.choices[0].message.content.trim();
             const pageResult = parseJSONResponse(responseContent);
-            console.log(`✅ Page ${pageIndex + 1} processed with GPT-3.5-turbo final fallback`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Page ${pageIndex + 1} processed with GPT-3.5-turbo final fallback`);
+            }
             return { success: true, result: pageResult, pageIndex };
             
           } catch (finalError) {
-            console.log(`❌ Page ${pageIndex + 1} failed completely:`, finalError.message);
+            console.error(`❌ Page ${pageIndex + 1} failed completely:`, finalError.message);
             return { success: false, result: null, pageIndex };
           }
         }
@@ -481,12 +441,18 @@ export const extractMetrics = async (documentText) => {
         results[pageIndex] = result;
       });
       
-      console.log(` Processed batch ${Math.floor(i / concurrencyLimit) + 1}/${Math.ceil(pages.length / concurrencyLimit)}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(` Processed batch ${Math.floor(i / concurrencyLimit) + 1}/${Math.ceil(pages.length / concurrencyLimit)}`);
+      }
     }
     
-    console.log(`🔗 Merging results from ${results.length} pages...`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔗 Merging results from ${results.length} pages...`);
+    }
     const mergedResult = mergeMetricsResults(results);
-    console.log(`✅ Metrics extraction completed with parallel processing`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ Metrics extraction completed with parallel processing`);
+    }
     
     // Cache the result
     processedCache.set(documentHash, mergedResult);
