@@ -324,6 +324,7 @@ Respond with ONLY the percentage number (no % symbol). If not found, respond wit
   // Extract multiple candidate values for a single metric with date awareness
   async extractMetricCandidates(documentText, prompt, metricName) {
     const candidates = [];
+    let filteredCandidates = null;
     
     try {
       // First, extract the valuation date for filtering
@@ -363,7 +364,7 @@ Respond with ONLY the percentage number (no % symbol). If not found, respond wit
       }
 
       // Filter out candidates that are clearly historical or projected
-      const filteredCandidates = this.filterCandidatesByDate(candidates, valuationDate);
+      filteredCandidates = this.filterCandidatesByDate(candidates, valuationDate);
       
     } catch (error) {
       console.error(`Error collecting candidates for ${metricName}:`, error);
