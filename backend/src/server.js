@@ -11,6 +11,7 @@ import metricsRoutes from './routes/metrics.js';
 // Supabase routes (optional - can be enabled via environment variable)
 import supabasePdfRoutes from './routes/supabasePdf.js';
 import supabaseMetricsRoutes from './routes/supabaseMetrics.js';
+import supabaseQuestionRoutes from './routes/supabaseQuestions.js';
 
 // Security middleware imports
 import { 
@@ -189,6 +190,11 @@ if (process.env.USE_SUPABASE === 'true') {
   
   app.use('/api/supabase/metrics',
     supabaseMetricsRoutes
+  );
+  
+  app.use('/api/supabase/questions',
+    validateQuestion,
+    supabaseQuestionRoutes
   );
 } else {
   console.log('🗄️ Using PostgreSQL for data storage');
