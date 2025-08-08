@@ -8,6 +8,10 @@ import pdfRoutes from './routes/pdf.js';
 import questionRoutes from './routes/questions.js';
 import metricsRoutes from './routes/metrics.js';
 
+// Supabase routes (optional - can be enabled via environment variable)
+import supabasePdfRoutes from './routes/supabasePdf.js';
+import supabaseMetricsRoutes from './routes/supabaseMetrics.js';
+
 // Security middleware imports
 import { 
   securityHeaders,
@@ -159,6 +163,37 @@ app.use('/api/metrics',
   metricsRoutes
 );
 
+// Optional Supabase routes (enable with USE_SUPABASE=true)
+if (process.env.USE_SUPABASE === 'true') {
+  console.log('🗄️ Using Supabase for data storage');
+  
+  app.use('/api/supabase/pdf',
+    upload.single('pdf'),
+    validatePdfUpload,
+    async (req, res, next) => {
+      if (req.file) {
+        const validation = await FileValidator.validatePdf(req.file.path, req);
+        if (!validation.isValid) {
+          await FileValidator.cleanupFile(req.file.path, 'validation failed');
+          return res.status(400).json({
+            error: 'File validation failed',
+            details: validation.errors
+          });
+        }
+        req.fileValidation = validation;
+      }
+      next();
+    },
+    supabasePdfRoutes
+  );
+  
+  app.use('/api/supabase/metrics',
+    supabaseMetricsRoutes
+  );
+} else {
+  console.log('🗄️ Using PostgreSQL for data storage');
+}
+
 // 404 handler for unmatched routes
 app.use('*', (req, res) => {
   logSecurityEvent('ROUTE_NOT_FOUND', { url: req.originalUrl }, req);
@@ -219,11 +254,15 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   
   // Clean up old processing jobs on startup
-  import('./services/jobService.js').then(({ jobService }) => {
-    jobService.cleanupOldJobs(7); // Clean jobs older than 7 days
-  }).catch(err => {
-    console.error('Failed to cleanup old jobs:', err.message);
-  });
+  if (process.env.USE_SUPABASE !== 'true') {
+    import('./services/jobService.js').then(({ jobService }) => {
+      jobService.cleanupOldJobs(7); // Clean jobs older than 7 days
+    }).catch(err => {
+      console.error('Failed to cleanup old jobs:', err.message);
+    });
+  } else {
+    console.log('⚡ Using Supabase job service - skipping PostgreSQL cleanup');
+  }
   
   // Clean up old PDF files on startup
   import('./middleware/fileValidation.js').then(({ FileValidator }) => {

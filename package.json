@@ -2,6 +2,7 @@
   "name": "village-labs",
   "version": "1.0.0",
   "description": "ESOP Analyzer Application",
+  "type": "module",
   "private": true,
   "workspaces": [
     "frontend",
@@ -10,7 +11,9 @@
   "scripts": {
     "start": "cd frontend && npm start",
     "build": "cd frontend && npm run build",
-    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm start\""
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm start\"",
+    "setup-supabase": "node setup-supabase.js",
+    "test-supabase": "cd backend && node test-supabase.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

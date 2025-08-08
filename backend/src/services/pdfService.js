@@ -289,7 +289,7 @@ END OF EXTRACTED TEXT
 };
 
 // Create specialized chunks for visual elements
-const createVisualChunks = (visualElements) => {
+export const createVisualChunks = (visualElements) => {
   const chunks = [];
   
   // Process tables
@@ -381,7 +381,7 @@ Location: Page ${image.page}`;
 };
 
 // Chunk a single page's content into optimal sized pieces
-const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap = 200) => {
+export const chunkPageContent = (pageContent, pageNumber, maxChunkSize = 2000, overlap = 200) => {
   // If content is small enough, return as single chunk
   if (pageContent.length <= maxChunkSize) {
     return [{
@@ -635,7 +635,7 @@ const extractPagesFromReductoResult = (result) => {
 };
 
 // Enhanced extraction that handles both text and visual content
-const extractContentFromReductoResult = (result) => {
+export const extractContentFromReductoResult = (result) => {
   try {
     const visualElements = {
       tables: [],
@@ -717,7 +717,7 @@ const extractContentFromReductoResult = (result) => {
 };
 
 // Extract page-by-page content from basic PDF parsing
-const extractBasicPdfTextByPage = async (dataBuffer) => {
+export const extractBasicPdfTextByPage = async (dataBuffer) => {
   const fullText = await extractBasicPdfText(dataBuffer);
   
   // Try to split into logical pages based on content patterns
@@ -725,7 +725,7 @@ const extractBasicPdfTextByPage = async (dataBuffer) => {
 };
 
 // Intelligently split text into logical pages
-const splitTextIntoPages = (text) => {
+export const splitTextIntoPages = (text) => {
   // Common page break indicators
   const pageBreakPatterns = [
     /\n\s*Page\s+\d+\s*\n/gi,
